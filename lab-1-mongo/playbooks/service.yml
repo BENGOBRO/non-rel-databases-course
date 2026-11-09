@@ -1,0 +1,44 @@
+---
+# ansible-playbook playbooks/service.yml -e op=stop|start|restart|status
+- name: mongod service control
+  hosts: mongodb
+  become: true
+  gather_facts: false
+  vars:
+    op: status
+  tasks:
+    - name: Validate op
+      ansible.builtin.assert:
+        that: op in ['start', 'stop', 'restart', 'status']
+        fail_msg: "op: start | stop | restart | status"
+        quiet: true
+
+    - name: "{{ op | capitalize }} mongod"
+      ansible.builtin.systemd_service:
+        name: mongod
+        state: "{{ {'start': 'started', 'stop': 'stopped', 'restart': 'restarted'}[op] }}"
+      when: op != 'status'
+
+    - name: Wait for port to open
+      ansible.builtin.wait_for:
+        port: "{{ mongodb_port }}"
+        host: 127.0.0.1
+        timeout: 60
+      when: op in ['start', 'restart']
+
+    - name: Wait for port to close
+      ansible.builtin.wait_for:
+        port: "{{ mongodb_port }}"
+        host: 127.0.0.1
+        state: stopped
+        timeout: 60
+      when: op == 'stop'
+
+    - name: Service state
+      ansible.builtin.command: systemctl show mongod -p ActiveState -p SubState -p UnitFileState -p MainPID
+      register: service_state
+      changed_when: false
+
+    - name: Report
+      ansible.builtin.debug:
+        msg: "{{ service_state.stdout_lines }}"

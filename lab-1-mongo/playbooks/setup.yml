@@ -1,0 +1,8 @@
+---
+- name: Part 1 - MongoDB on VM
+  hosts: mongodb
+  become: true
+  roles:
+    - host_prep
+    - mongodb
+    - lab_data

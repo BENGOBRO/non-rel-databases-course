@@ -1,0 +1,88 @@
+---
+# Проверка доступности MongoDB. Плейбук падает, если есть CRITICAL.
+- name: MongoDB healthcheck
+  hosts: mongodb
+  become: true
+  gather_facts: true
+  vars:
+    conn_warn_pct: 80
+    disk_warn_pct: 85
+  tasks:
+    - name: Service facts
+      ansible.builtin.service_facts:
+
+    - name: Unit file state
+      ansible.builtin.command: systemctl is-enabled mongod
+      register: hc_enabled
+      changed_when: false
+      failed_when: false
+
+    - name: TCP port
+      ansible.builtin.wait_for:
+        port: "{{ mongodb_port }}"
+        host: 127.0.0.1
+        timeout: 3
+      register: hc_port
+      ignore_errors: true
+
+    - name: Ping and serverStatus as admin
+      community.mongodb.mongodb_shell:
+        login_port: "{{ mongodb_port }}"
+        login_user: "{{ mongodb_admin_user }}"
+        login_password: "{{ mongodb_admin_password }}"
+        login_database: admin
+        db: admin
+        stringify: false
+        transform: json
+        eval: >-
+          const t = Date.now(); const ok = db.runCommand({ping: 1}).ok; const ms = Date.now() - t;
+          const s = db.serverStatus();
+          print(JSON.stringify({ping: ok, ping_ms: ms, version: s.version, uptime: s.uptime,
+            conn_current: s.connections.current, conn_available: s.connections.available,
+            resident_mb: s.mem.resident, dbs: db.adminCommand({listDatabases: 1, nameOnly: true}).databases.length}))
+      register: hc_status
+      changed_when: false
+      ignore_errors: true
+      no_log: true
+
+    - name: Evaluate
+      ansible.builtin.set_fact:
+        hc_checks: "{{ checks }}"
+      vars:
+        st: "{{ hc_status.transformed_output | default({}) if hc_status is succeeded else {} }}"
+        root_mount: "{{ ansible_facts.mounts | selectattr('mount', 'equalto', '/') | first }}"
+        disk_pct: "{{ (100 - root_mount.size_available * 100 / root_mount.size_total) | round(0) | int }}"
+        conn_pct: "{{ (st.conn_current * 100 / (st.conn_current + st.conn_available)) | round(1) if st else 0 }}"
+        service_state: "{{ ansible_facts.services['mongod.service'].state | default('missing') }}"
+        checks:
+          - name: service
+            level: "{{ 'OK' if service_state == 'running' else 'CRITICAL' }}"
+            msg: "mongod {{ service_state }}"
+          - name: autostart
+            level: "{{ 'OK' if hc_enabled.stdout == 'enabled' else 'WARNING' }}"
+            msg: "{{ hc_enabled.stdout }}"
+          - name: tcp
+            level: "{{ 'OK' if hc_port is succeeded else 'CRITICAL' }}"
+            msg: "127.0.0.1:{{ mongodb_port }} {{ 'accepts connections' if hc_port is succeeded else 'closed' }}"
+          - name: auth
+            level: "{{ 'OK' if st else 'CRITICAL' }}"
+            msg: "{{ ('admin login ok, MongoDB ' ~ st.version ~ ', uptime ' ~ st.uptime ~ ' s, ping ' ~ st.ping_ms ~ ' ms, dbs: ' ~ st.dbs) if st else 'login/ping failed' }}"
+          - name: connections
+            level: "{{ 'UNKNOWN' if not st else 'OK' if (conn_pct | float) < conn_warn_pct else 'WARNING' }}"
+            msg: "{{ (st.conn_current ~ ' current, ' ~ st.conn_available ~ ' available (' ~ conn_pct ~ '%)') if st else '-' }}"
+          - name: memory
+            level: "{{ 'OK' if st else 'UNKNOWN' }}"
+            msg: "{{ ('resident ' ~ st.resident_mb ~ ' MB') if st else '-' }}"
+          - name: disk
+            level: "{{ 'OK' if (disk_pct | int) < disk_warn_pct else 'WARNING' }}"
+            msg: "/ used {{ disk_pct }}%, free {{ (root_mount.size_available / 1024**3) | round(1) }} GB"
+
+    - name: Report
+      ansible.builtin.debug:
+        msg: "{{ hc_checks | map(attribute='level') | zip(hc_checks | map(attribute='name'), hc_checks | map(attribute='msg')) | map('join', '  ') | list }}"
+
+    - name: Overall
+      ansible.builtin.assert:
+        that: hc_checks | selectattr('level', 'equalto', 'CRITICAL') | list | length == 0
+        success_msg: "MongoDB {{ inventory_hostname }}: {{ 'WARNING' if hc_checks | selectattr('level', 'equalto', 'WARNING') | list else 'OK' }}"
+        fail_msg: "MongoDB {{ inventory_hostname }}: CRITICAL"
