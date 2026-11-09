@@ -1,0 +1,28 @@
+{{ ansible_managed | comment }}
+
+storage:
+  dbPath: {{ mongodb_dbpath }}
+  wiredTiger:
+    engineConfig:
+      cacheSizeGB: {{ mongodb_cache_size_gb }}
+
+systemLog:
+  destination: file
+  path: {{ mongodb_logpath }}
+  logAppend: true
+  logRotate: reopen
+
+net:
+  port: {{ mongodb_port }}
+  bindIp: {{ mongodb_bind_ip }}
+  maxIncomingConnections: {{ mongodb_max_connections }}
+
+processManagement:
+  timeZoneInfo: /usr/share/zoneinfo
+
+operationProfiling:
+  mode: slowOp
+  slowOpThresholdMs: {{ mongodb_slow_op_ms }}
+
+security:
+  authorization: enabled

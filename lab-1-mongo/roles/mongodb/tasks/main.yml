@@ -1,0 +1,84 @@
+---
+- name: MongoDB repo key
+  ansible.builtin.get_url:
+    url: "https://pgp.mongodb.com/server-{{ mongodb_version }}.asc"
+    dest: "/usr/share/keyrings/mongodb-server-{{ mongodb_version }}.asc"
+    mode: "0644"
+
+- name: MongoDB repo
+  ansible.builtin.apt_repository:
+    repo: "{{ mongodb_repo }}"
+    filename: "mongodb-org-{{ mongodb_version }}"
+
+- name: Install mongodb-org
+  ansible.builtin.apt:
+    name: mongodb-org
+    update_cache: true
+
+- name: Hold mongodb packages
+  ansible.builtin.dpkg_selections:
+    name: "{{ item }}"
+    selection: hold
+  loop: "{{ mongodb_packages }}"
+
+- name: mongod.conf
+  ansible.builtin.template:
+    src: mongod.conf.j2
+    dest: /etc/mongod.conf
+    mode: "0644"
+  notify: Restart mongod
+
+- name: systemd drop-in dir
+  ansible.builtin.file:
+    path: /etc/systemd/system/mongod.service.d
+    state: directory
+    mode: "0755"
+
+- name: systemd drop-in
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/mongod.service.d/override.conf
+    mode: "0644"
+    content: |
+      [Unit]
+      After=network-online.target disable-thp.service
+      Wants=network-online.target disable-thp.service
+
+      [Service]
+      Restart=on-failure
+      RestartSec=5
+      LimitNOFILE=64000
+      LimitNPROC=64000
+  notify: Restart mongod
+
+- name: Enable and start mongod
+  ansible.builtin.systemd_service:
+    name: mongod
+    enabled: true
+    state: started
+    daemon_reload: true
+
+- name: Apply pending restarts
+  ansible.builtin.meta: flush_handlers
+
+- name: Wait for mongod
+  ansible.builtin.wait_for:
+    port: "{{ mongodb_port }}"
+    host: 127.0.0.1
+    timeout: 60
+
+- name: Create admin via localhost exception
+  community.mongodb.mongodb_user:
+    login_port: "{{ mongodb_port }}"
+    create_for_localhost_exception: /root/.mongodb_admin_created
+    database: admin
+    name: "{{ mongodb_admin_user }}"
+    password: "{{ mongodb_admin_password }}"
+    roles: [{db: admin, role: root}]
+  no_log: true
+
+- name: Check that anonymous access is closed
+  ansible.builtin.command:
+    cmd: mongosh --quiet --port {{ mongodb_port }} --eval 'db.getSiblingDB("admin").runCommand({listDatabases:1}).ok'
+  register: mongodb_anon
+  changed_when: false
+  failed_when: mongodb_anon.rc == 0 and mongodb_anon.stdout == '1'
