@@ -1,0 +1,7 @@
+# локальные переопределения конфигурации с паролями
+config.local.env
+
+# macOS / IDE
+.DS_Store
+.idea/
+.vscode/
