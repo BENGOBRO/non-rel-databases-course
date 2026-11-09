@@ -1,0 +1,36 @@
+---
+# Шаг 5: удаление роли shopReader и пользователя shop_analyst
+rbac_roles:
+  - name: shopReader
+    db: shop
+    state: absent
+  - name: shopEditor
+    db: shop
+    privileges:
+      - resource: {db: shop, collection: ""}
+        actions: [find, insert, remove, listCollections]
+  - name: gradeEditor
+    db: university
+    privileges:
+      - resource: {db: university, collection: ""}
+        actions: [find, listCollections]
+      - resource: {db: university, collection: enrollments}
+        actions: [update]
+  - name: loansWriter
+    db: library
+    privileges:
+      - resource: {db: library, collection: loans}
+        actions: [find, insert, update, remove, collStats]
+
+rbac_users:
+  - name: shop_analyst
+    state: absent
+  - name: shop_manager
+    roles: [{role: shopEditor, db: shop}]
+  - name: univ_teacher
+    roles: [{role: gradeEditor, db: university}]
+  - name: library_clerk
+    roles: [{role: loansWriter, db: library}]
+
+rbac_check:
+  - {user: shop_analyst, db: shop, collections: [orders]}

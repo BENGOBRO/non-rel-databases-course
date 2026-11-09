@@ -1,0 +1,33 @@
+---
+# Шаг 2: отзыв роли — у shop_manager забираем shopEditor
+rbac_roles:
+  - name: shopReader
+    db: shop
+    privileges:
+      - resource: {db: shop, collection: ""}
+        actions: [find, listCollections, collStats, dbStats]
+  - name: shopEditor
+    db: shop
+    privileges:
+      - resource: {db: shop, collection: ""}
+        actions: [find, insert, update, listCollections]
+  - name: gradeEditor
+    db: university
+    privileges:
+      - resource: {db: university, collection: ""}
+        actions: [find, listCollections]
+      - resource: {db: university, collection: enrollments}
+        actions: [update]
+
+rbac_users:
+  - name: shop_analyst
+    roles: [{role: shopReader, db: shop}]
+  - name: shop_manager
+    roles: []
+  - name: univ_teacher
+    roles: [{role: gradeEditor, db: university}]
+  - name: library_clerk
+    roles: []
+
+rbac_check:
+  - {user: shop_manager, db: shop, collections: [orders]}
