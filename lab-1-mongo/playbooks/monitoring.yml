@@ -38,7 +38,7 @@
 
     - name: Dashboard
       ansible.builtin.copy:
-        src: ../files/grafana/dashboards/mongodb-lab.json
+        src: grafana/dashboards/mongodb-lab.json
         dest: /var/lib/grafana/dashboards/mongodb-lab.json
         owner: root
         group: grafana

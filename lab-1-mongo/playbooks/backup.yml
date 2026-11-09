@@ -12,6 +12,7 @@
     - name: Run backup
       ansible.builtin.command: "/usr/local/bin/mongo-backup {{ 'all' if target == 'all' else 'db ' ~ target }}"
       register: backup_run
+      changed_when: true
       when: target is defined
 
     - name: Backup result

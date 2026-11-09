@@ -21,20 +21,20 @@
     selection: hold
   loop: "{{ mongodb_packages }}"
 
-- name: mongod.conf
+- name: Config mongod.conf
   ansible.builtin.template:
     src: mongod.conf.j2
     dest: /etc/mongod.conf
     mode: "0644"
   notify: Restart mongod
 
-- name: systemd drop-in dir
+- name: Systemd drop-in dir
   ansible.builtin.file:
     path: /etc/systemd/system/mongod.service.d
     state: directory
     mode: "0755"
 
-- name: systemd drop-in
+- name: Systemd drop-in
   ansible.builtin.copy:
     dest: /etc/systemd/system/mongod.service.d/override.conf
     mode: "0644"

@@ -1,6 +1,6 @@
 ---
 # ansible-playbook playbooks/service.yml -e op=stop|start|restart|status
-- name: mongod service control
+- name: Mongod service control
   hosts: mongodb
   become: true
   gather_facts: false
@@ -13,7 +13,7 @@
         fail_msg: "op: start | stop | restart | status"
         quiet: true
 
-    - name: "{{ op | capitalize }} mongod"
+    - name: "Control mongod: {{ op }}"
       ansible.builtin.systemd_service:
         name: mongod
         state: "{{ {'start': 'started', 'stop': 'stopped', 'restart': 'restarted'}[op] }}"
@@ -35,10 +35,10 @@
       when: op == 'stop'
 
     - name: Service state
-      ansible.builtin.command: systemctl show mongod -p ActiveState -p SubState -p UnitFileState -p MainPID
+      ansible.builtin.systemd_service:
+        name: mongod
       register: service_state
-      changed_when: false
 
     - name: Report
       ansible.builtin.debug:
-        msg: "{{ service_state.stdout_lines }}"
+        msg: "{{ ['ActiveState', 'SubState', 'UnitFileState', 'MainPID'] | map('extract', service_state.status) | list }}"

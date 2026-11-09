@@ -36,7 +36,7 @@
     dest: /usr/local/bin/mongo-backup
     mode: "0755"
 
-- name: systemd units
+- name: Systemd units
   ansible.builtin.template:
     src: "{{ item }}.j2"
     dest: "/etc/systemd/system/{{ item }}"

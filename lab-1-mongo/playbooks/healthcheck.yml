@@ -12,10 +12,9 @@
       ansible.builtin.service_facts:
 
     - name: Unit file state
-      ansible.builtin.command: systemctl is-enabled mongod
-      register: hc_enabled
-      changed_when: false
-      failed_when: false
+      ansible.builtin.systemd_service:
+        name: mongod
+      register: hc_unit
 
     - name: TCP port
       ansible.builtin.wait_for:
@@ -54,19 +53,22 @@
         disk_pct: "{{ (100 - root_mount.size_available * 100 / root_mount.size_total) | round(0) | int }}"
         conn_pct: "{{ (st.conn_current * 100 / (st.conn_current + st.conn_available)) | round(1) if st else 0 }}"
         service_state: "{{ ansible_facts.services['mongod.service'].state | default('missing') }}"
+        hc_autostart: "{{ hc_unit.status.UnitFileState | default('missing') }}"
         checks:
           - name: service
             level: "{{ 'OK' if service_state == 'running' else 'CRITICAL' }}"
             msg: "mongod {{ service_state }}"
           - name: autostart
-            level: "{{ 'OK' if hc_enabled.stdout == 'enabled' else 'WARNING' }}"
-            msg: "{{ hc_enabled.stdout }}"
+            level: "{{ 'OK' if hc_autostart == 'enabled' else 'WARNING' }}"
+            msg: "{{ hc_autostart }}"
           - name: tcp
             level: "{{ 'OK' if hc_port is succeeded else 'CRITICAL' }}"
             msg: "127.0.0.1:{{ mongodb_port }} {{ 'accepts connections' if hc_port is succeeded else 'closed' }}"
           - name: auth
             level: "{{ 'OK' if st else 'CRITICAL' }}"
-            msg: "{{ ('admin login ok, MongoDB ' ~ st.version ~ ', uptime ' ~ st.uptime ~ ' s, ping ' ~ st.ping_ms ~ ' ms, dbs: ' ~ st.dbs) if st else 'login/ping failed' }}"
+            msg: >-
+              {{ ('admin login ok, MongoDB ' ~ st.version ~ ', uptime ' ~ st.uptime ~ ' s, ping '
+                  ~ st.ping_ms ~ ' ms, dbs: ' ~ st.dbs) if st else 'login/ping failed' }}
           - name: connections
             level: "{{ 'UNKNOWN' if not st else 'OK' if (conn_pct | float) < conn_warn_pct else 'WARNING' }}"
             msg: "{{ (st.conn_current ~ ' current, ' ~ st.conn_available ~ ' available (' ~ conn_pct ~ '%)') if st else '-' }}"

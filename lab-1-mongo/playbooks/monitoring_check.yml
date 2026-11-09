@@ -16,9 +16,15 @@
       - mongodb_ss_network_bytesIn
       - mongodb_dbstats_dataSize
   tasks:
-    - name: Services are active
-      ansible.builtin.command: systemctl is-active mongod mongodb_exporter node_exporter prometheus grafana-server
-      changed_when: false
+    - name: Service facts
+      ansible.builtin.service_facts:
+
+    - name: Services are running
+      ansible.builtin.assert:
+        that: ansible_facts.services[item ~ '.service'].state | default('') == 'running'
+        fail_msg: "{{ item }} is not running"
+        quiet: true
+      loop: [mongod, mongodb_exporter, node_exporter, prometheus, grafana-server]
 
     - name: Exporter metrics
       ansible.builtin.uri:
@@ -73,7 +79,9 @@
     - name: Summary
       ansible.builtin.debug:
         msg:
-          - "targets: {{ mon_targets.json.data.activeTargets | map(attribute='labels.job') | zip(mon_targets.json.data.activeTargets | map(attribute='health')) | map('join', '=') | join(', ') }}"
+          - "targets: {{ targets | map(attribute='labels.job') | zip(targets | map(attribute='health')) | map('join', '=') | join(', ') }}"
           - "ops/s now: {{ (mon_ops.json.data.result[0].value[1] | float) | round(1) if mon_ops.json.data.result else 0 }}"
           - "grafana {{ mon_grafana.json.version }}, dashboard: {{ mon_dash.json.dashboard.title }}"
           - "http://{{ ansible_host }}:{{ grafana_http_port }}/d/mongodb-lab"
+      vars:
+        targets: "{{ mon_targets.json.data.activeTargets }}"

@@ -1,7 +1,7 @@
 ---
 # Реально пробует find/insert/update/remove от имени пользователя и печатает матрицу.
 # Вход: check = {user, db, collections}
-- name: "Access check: {{ check.user }} on {{ check.db }}"
+- name: "Access check for {{ check.user }}"
   community.mongodb.mongodb_shell:
     login_port: "{{ mongodb_port }}"
     login_user: "{{ check.user }}"

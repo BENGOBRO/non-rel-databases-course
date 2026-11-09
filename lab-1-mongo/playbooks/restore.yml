@@ -48,6 +48,7 @@
         ns_args: "{{ ['--nsFrom=' ~ db ~ '.' ~ collection, '--nsTo=' ~ target_db ~ '.' ~ collection]
                      if target_db != db else [] }}"
       register: restore_run
+      changed_when: true
 
     - name: Count after restore
       community.mongodb.mongodb_shell:
