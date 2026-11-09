@@ -1,0 +1,53 @@
+---
+- name: Part 4 - monitoring
+  hosts: mongodb
+  become: true
+  pre_tasks:
+    - name: Exporter user (read-only statistics)
+      community.mongodb.mongodb_user:
+        login_port: "{{ mongodb_port }}"
+        login_user: "{{ mongodb_admin_user }}"
+        login_password: "{{ mongodb_admin_password }}"
+        login_database: admin
+        database: admin
+        name: "{{ exporter_user }}"
+        password: "{{ exporter_password }}"
+        update_password: on_create
+        roles: [{db: admin, role: clusterMonitor}, {db: local, role: read}]
+  roles:
+    - prometheus.prometheus.node_exporter
+    - prometheus.prometheus.mongodb_exporter
+    - prometheus.prometheus.prometheus
+    - grafana.grafana.grafana
+  post_tasks:
+    - name: Dashboard provider
+      ansible.builtin.copy:
+        dest: /etc/grafana/provisioning/dashboards/mongodb-lab.yml
+        owner: root
+        group: grafana
+        mode: "0640"
+        content: |
+          apiVersion: 1
+          providers:
+            - name: mongodb-lab
+              type: file
+              updateIntervalSeconds: 10
+              options:
+                path: /var/lib/grafana/dashboards
+      notify: Restart grafana
+
+    - name: Dashboard
+      ansible.builtin.copy:
+        src: ../files/grafana/dashboards/mongodb-lab.json
+        dest: /var/lib/grafana/dashboards/mongodb-lab.json
+        owner: root
+        group: grafana
+        mode: "0644"
+  handlers:
+    - name: Restart grafana
+      ansible.builtin.systemd_service:
+        name: grafana-server
+        state: restarted
+
+- name: Part 4 - check
+  ansible.builtin.import_playbook: monitoring_check.yml
