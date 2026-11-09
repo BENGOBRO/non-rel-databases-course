@@ -1,0 +1,22 @@
+---
+# Полное развёртывание стенда: ansible-playbook site.yml
+# Ролевая модель применяется в итоговом состоянии (rbac/04-collection-access.yml).
+- name: Part 1 - setup
+  ansible.builtin.import_playbook: playbooks/setup.yml
+
+- name: Part 2 - role model
+  ansible.builtin.import_playbook: playbooks/rbac.yml
+  vars:
+    rbac_state: "{{ lookup('file', playbook_dir ~ '/rbac/04-collection-access.yml') | from_yaml }}"
+    rbac_roles: "{{ rbac_state.rbac_roles }}"
+    rbac_users: "{{ rbac_state.rbac_users }}"
+    rbac_check: []
+
+- name: Part 3 - backups
+  ansible.builtin.import_playbook: playbooks/backup.yml
+
+- name: Part 4 - monitoring
+  ansible.builtin.import_playbook: playbooks/monitoring.yml
+
+- name: Healthcheck
+  ansible.builtin.import_playbook: playbooks/healthcheck.yml
