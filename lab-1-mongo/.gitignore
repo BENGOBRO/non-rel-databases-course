@@ -1,3 +1,4 @@
 collections/
 *.retry
 .vault_pass
+cloud-init.yml
