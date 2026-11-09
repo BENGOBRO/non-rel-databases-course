@@ -1,0 +1,76 @@
+---
+# Восстановление коллекции из самой свежей копии, где она есть:
+#   ansible-playbook playbooks/restore.yml -e db=shop -e collection=orders
+# Дополнительно: -e from=/var/backups/mongodb/all/<копия>  — конкретная копия
+#                -e to_db=shop_restored                     — восстановить рядом, не трогая исходную
+- name: Part 3 - restore collection
+  hosts: mongodb
+  become: true
+  gather_facts: false
+  vars:
+    target_db: "{{ to_db | default(db) }}"
+  tasks:
+    - name: Arguments
+      ansible.builtin.assert:
+        that: [db is defined, collection is defined]
+        fail_msg: "-e db=<база> -e collection=<коллекция>"
+        quiet: true
+
+    - name: Find copies with this collection
+      ansible.builtin.find:
+        paths: "{{ from | default(backup_dir) }}"
+        patterns: "{{ collection }}.bson.gz"
+        recurse: true
+      register: restore_found
+
+    - name: Pick latest copy
+      ansible.builtin.set_fact:
+        restore_copy: "{{ (candidates | sort(attribute='mtime') | last).path | dirname | dirname }}"
+      vars:
+        candidates: "{{ restore_found.files
+                        | selectattr('path', 'search', '/' ~ db ~ '/' ~ collection ~ '\\.bson\\.gz$')
+                        | rejectattr('path', 'search', '\\.partial/') | list }}"
+      failed_when: candidates | length == 0
+
+    - name: Read manifest
+      ansible.builtin.slurp:
+        src: "{{ restore_copy }}/manifest.json"
+      register: restore_manifest
+
+    - name: Restore
+      ansible.builtin.command:
+        argv: "{{ base + ns_args }}"
+      vars:
+        base: [mongorestore, --host, 127.0.0.1, --port, "{{ mongodb_port }}",
+               --username, "{{ backup_user }}", --authenticationDatabase, admin,
+               --config, /etc/mongo-backup/tools.yml, --gzip, --drop, --dir, "{{ restore_copy }}",
+               "--nsInclude={{ db }}.{{ collection }}"]
+        ns_args: "{{ ['--nsFrom=' ~ db ~ '.' ~ collection, '--nsTo=' ~ target_db ~ '.' ~ collection]
+                     if target_db != db else [] }}"
+      register: restore_run
+
+    - name: Count after restore
+      community.mongodb.mongodb_shell:
+        login_port: "{{ mongodb_port }}"
+        login_user: "{{ mongodb_admin_user }}"
+        login_password: "{{ mongodb_admin_password }}"
+        login_database: admin
+        db: "{{ target_db }}"
+        stringify: false
+        transform: raw
+        eval: >-
+          print(db.getCollection("{{ collection }}").countDocuments() + " " +
+                db.getCollection("{{ collection }}").getIndexes().map(i => i.name).join(","))
+      register: restore_count
+      changed_when: false
+
+    - name: Verify against manifest
+      ansible.builtin.assert:
+        that: actual | int == expected | int
+        success_msg: "{{ target_db }}.{{ collection }}: in backup {{ expected }}, in db {{ actual }}, indexes {{ indexes }} (from {{ restore_copy }})"
+        fail_msg: "{{ target_db }}.{{ collection }}: in backup {{ expected }}, in db {{ actual }}"
+      vars:
+        manifest: "{{ restore_manifest.content | b64decode | from_json }}"
+        expected: "{{ manifest.collections[db ~ '.' ~ collection] }}"
+        actual: "{{ (restore_count.transformed_output | string).split()[0] }}"
+        indexes: "{{ (restore_count.transformed_output | string).split()[1] }}"
