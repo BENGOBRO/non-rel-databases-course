@@ -1,0 +1,29 @@
+---
+# ansible-playbook playbooks/backup.yml                 установка: пользователь, скрипт, таймер
+# ansible-playbook playbooks/backup.yml -e target=all   + копия всех учебных баз
+# ansible-playbook playbooks/backup.yml -e target=shop  + копия одной базы
+- name: Part 3 - backups
+  hosts: mongodb
+  become: true
+  gather_facts: false
+  roles:
+    - mongodb_backup
+  tasks:
+    - name: Run backup
+      ansible.builtin.command: "/usr/local/bin/mongo-backup {{ 'all' if target == 'all' else 'db ' ~ target }}"
+      register: backup_run
+      when: target is defined
+
+    - name: Backup result
+      ansible.builtin.debug:
+        msg: "{{ backup_run.stdout_lines }}"
+      when: target is defined
+
+    - name: List backups
+      ansible.builtin.command: /usr/local/bin/mongo-backup list
+      register: backup_list
+      changed_when: false
+
+    - name: Backups
+      ansible.builtin.debug:
+        msg: "{{ backup_list.stdout_lines }}"

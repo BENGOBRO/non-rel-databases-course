@@ -1,0 +1,51 @@
+---
+- name: Backup user
+  community.mongodb.mongodb_user:
+    login_port: "{{ mongodb_port }}"
+    login_user: "{{ mongodb_admin_user }}"
+    login_password: "{{ mongodb_admin_password }}"
+    login_database: admin
+    database: admin
+    name: "{{ backup_user }}"
+    password: "{{ backup_password }}"
+    update_password: on_create
+    roles: [{db: admin, role: backup}, {db: admin, role: restore}]
+
+- name: Config dir
+  ansible.builtin.file:
+    path: /etc/mongo-backup
+    state: directory
+    mode: "0700"
+
+- name: Password for mongodump/mongorestore
+  ansible.builtin.copy:
+    dest: /etc/mongo-backup/tools.yml
+    content: "password: {{ backup_password | to_json }}\n"
+    mode: "0600"
+  no_log: true
+
+- name: Backup dir
+  ansible.builtin.file:
+    path: "{{ backup_dir }}"
+    state: directory
+    mode: "0750"
+
+- name: Backup script
+  ansible.builtin.template:
+    src: mongo-backup.sh.j2
+    dest: /usr/local/bin/mongo-backup
+    mode: "0755"
+
+- name: systemd units
+  ansible.builtin.template:
+    src: "{{ item }}.j2"
+    dest: "/etc/systemd/system/{{ item }}"
+    mode: "0644"
+  loop: [mongo-backup.service, mongo-backup.timer]
+
+- name: Enable timer
+  ansible.builtin.systemd_service:
+    name: mongo-backup.timer
+    enabled: true
+    state: started
+    daemon_reload: true
