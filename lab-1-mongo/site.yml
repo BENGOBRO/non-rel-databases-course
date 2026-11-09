@@ -7,7 +7,7 @@
 - name: Part 2 - role model
   ansible.builtin.import_playbook: playbooks/rbac.yml
   vars:
-    rbac_state: "{{ lookup('file', playbook_dir ~ '/rbac/04-collection-access.yml') | from_yaml }}"
+    rbac_state: "{{ lookup('file', inventory_dir ~ '/../rbac/04-collection-access.yml') | from_yaml }}"
     rbac_roles: "{{ rbac_state.rbac_roles }}"
     rbac_users: "{{ rbac_state.rbac_users }}"
     rbac_check: []
