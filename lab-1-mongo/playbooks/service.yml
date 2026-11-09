@@ -41,4 +41,6 @@
 
     - name: Report
       ansible.builtin.debug:
-        msg: "{{ ['ActiveState', 'SubState', 'UnitFileState', 'MainPID'] | map('extract', service_state.status) | list }}"
+        msg: "{{ dict(keys | zip(keys | map('extract', service_state.status))) }}"
+      vars:
+        keys: [ActiveState, SubState, UnitFileState, MainPID]
