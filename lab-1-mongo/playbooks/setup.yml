@@ -1,8 +1,15 @@
 ---
-- name: Part 1 - MongoDB on VM
+- name: Part 1 - host preparation
+  hosts: mongodb
+  become: true
+  vars:
+    ansible_python_interpreter: /usr/bin/python3
+  roles:
+    - host_prep
+
+- name: Part 1 - MongoDB
   hosts: mongodb
   become: true
   roles:
-    - host_prep
     - mongodb
     - lab_data

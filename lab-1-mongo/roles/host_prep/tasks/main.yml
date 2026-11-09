@@ -9,9 +9,16 @@
 
 - name: Install base packages
   ansible.builtin.apt:
-    name: [gnupg, curl, jq, chrony, python3-pymongo]
+    name: [gnupg, curl, jq, chrony, python3-venv]
     update_cache: true
     cache_valid_time: 3600
+
+# в Ubuntu 24.04 python3-pymongo версии 3.x, а community.mongodb нужен pymongo 4
+- name: Python venv with pymongo
+  ansible.builtin.pip:
+    name: "{{ host_prep_pymongo }}"
+    virtualenv: /opt/mongo-lab/venv
+    virtualenv_command: python3 -m venv
 
 - name: Disable THP service
   ansible.builtin.copy:

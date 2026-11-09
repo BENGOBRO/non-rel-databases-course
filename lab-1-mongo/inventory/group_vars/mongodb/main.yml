@@ -1,4 +1,7 @@
 ---
+# venv с pymongo 4 создаёт роль host_prep (см. playbooks/setup.yml)
+ansible_python_interpreter: /opt/mongo-lab/venv/bin/python
+
 # MongoDB
 mongodb_version: "8.0"
 mongodb_port: 27017
