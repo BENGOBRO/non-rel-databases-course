@@ -1,0 +1,50 @@
+---
+- name: Check OS
+  ansible.builtin.assert:
+    that:
+      - ansible_facts.distribution in ['Ubuntu', 'Debian']
+      - ansible_facts.architecture in ['x86_64', 'aarch64']
+      - ansible_facts.memtotal_mb >= 1800
+    fail_msg: Нужна Ubuntu 22.04/24.04 или Debian 12 (amd64/arm64) и не меньше 2 ГБ ОЗУ
+
+- name: Install base packages
+  ansible.builtin.apt:
+    name: [gnupg, curl, jq, chrony, python3-pymongo]
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Disable THP service
+  ansible.builtin.copy:
+    src: disable-thp.service
+    dest: /etc/systemd/system/disable-thp.service
+    mode: "0644"
+  notify: Restart disable-thp
+
+- name: Enable THP service
+  ansible.builtin.systemd_service:
+    name: disable-thp
+    enabled: true
+    state: started
+    daemon_reload: true
+
+- name: Kernel parameters
+  ansible.posix.sysctl:
+    name: "{{ item.key }}"
+    value: "{{ item.value }}"
+    sysctl_file: /etc/sysctl.d/90-mongodb.conf
+  loop: "{{ host_prep_sysctl | dict2items }}"
+
+- name: Process limits for mongodb
+  community.general.pam_limits:
+    domain: mongodb
+    limit_type: "-"
+    limit_item: "{{ item }}"
+    value: "64000"
+    dest: /etc/security/limits.d/mongodb.conf
+  loop: [nofile, nproc]
+
+- name: Time sync
+  ansible.builtin.service:
+    name: chrony
+    state: started
+    enabled: true
