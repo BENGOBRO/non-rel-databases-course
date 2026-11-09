@@ -1,0 +1,59 @@
+---
+# Применяет желаемое состояние ролей и пользователей из rbac_roles / rbac_users.
+# Порядок важен: сначала роли, потом пользователи; удаление — в обратном порядке.
+- name: RBAC
+  module_defaults:
+    group/community.mongodb.mongodb:
+      login_port: "{{ mongodb_port }}"
+      login_user: "{{ mongodb_admin_user }}"
+      login_password: "{{ mongodb_admin_password }}"
+      login_database: admin
+  block:
+    - name: Roles present
+      community.mongodb.mongodb_role:
+        name: "{{ item.name }}"
+        database: "{{ item.db }}"
+        privileges: "{{ item.privileges | default([]) }}"
+        roles: "{{ item.roles | default([]) }}"
+      loop: "{{ rbac_roles }}"
+      loop_control:
+        label: "{{ item.name }}@{{ item.db }}"
+      when: item.state | default('present') == 'present'
+
+    - name: Users present
+      community.mongodb.mongodb_user:
+        database: admin
+        name: "{{ item.name }}"
+        password: "{{ vault_rbac_passwords[item.name] }}"
+        update_password: on_create
+        roles: "{{ item.roles | default([]) }}"
+      loop: "{{ rbac_users }}"
+      loop_control:
+        label: "{{ item.name }}: {{ item.roles | default([]) | map(attribute='role') | join(', ') or '-' }}"
+      when: item.state | default('present') == 'present'
+
+    - name: Users absent
+      community.mongodb.mongodb_user:
+        database: admin
+        name: "{{ item.name }}"
+        state: absent
+      loop: "{{ rbac_users }}"
+      loop_control:
+        label: "{{ item.name }}"
+      when: item.state | default('present') == 'absent'
+
+    - name: Roles absent
+      community.mongodb.mongodb_role:
+        name: "{{ item.name }}"
+        database: "{{ item.db }}"
+        state: absent
+      loop: "{{ rbac_roles }}"
+      loop_control:
+        label: "{{ item.name }}@{{ item.db }}"
+      when: item.state | default('present') == 'absent'
+
+- name: Access check script
+  ansible.builtin.copy:
+    src: rbac_check.js
+    dest: /opt/mongo-lab/rbac_check.js
+    mode: "0644"

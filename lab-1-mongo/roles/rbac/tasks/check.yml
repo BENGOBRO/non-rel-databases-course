@@ -1,0 +1,40 @@
+---
+# Реально пробует find/insert/update/remove от имени пользователя и печатает матрицу.
+# Вход: check = {user, db, collections}
+- name: "Access check: {{ check.user }} on {{ check.db }}"
+  community.mongodb.mongodb_shell:
+    login_port: "{{ mongodb_port }}"
+    login_user: "{{ check.user }}"
+    login_password: "{{ vault_rbac_passwords[check.user] }}"
+    login_database: admin
+    db: "{{ check.db }}"
+    stringify: false
+    transform: raw
+    file: /opt/mongo-lab/rbac_check.js
+  environment:
+    CHECK_USER: "{{ check.user }}"
+    CHECK_DB: "{{ check.db }}"
+    CHECK_COLLS: "{{ check.collections | join(' ') }}"
+  register: rbac_check_out
+  changed_when: false
+  failed_when: false
+
+- name: "Access matrix: {{ check.user }}"
+  ansible.builtin.debug:
+    msg: >-
+      {{ (rbac_check_out.transformed_output | string).splitlines()
+         if rbac_check_out.transformed_output is defined
+         else ['login failed for ' ~ check.user ~ ': ' ~ rbac_check_out.msg | default('')] }}
+
+- name: Remove test documents
+  community.mongodb.mongodb_shell:
+    login_port: "{{ mongodb_port }}"
+    login_user: "{{ mongodb_admin_user }}"
+    login_password: "{{ mongodb_admin_password }}"
+    login_database: admin
+    db: "{{ check.db }}"
+    stringify: false
+    transform: raw
+    eval: >-
+      {{ check.collections | to_json }}.forEach(c => db.getCollection(c).deleteMany({_rbac_check: true}))
+  changed_when: false
