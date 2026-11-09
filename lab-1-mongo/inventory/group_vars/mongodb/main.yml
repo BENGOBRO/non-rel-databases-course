@@ -1,0 +1,41 @@
+---
+# MongoDB
+mongodb_version: "8.0"
+mongodb_port: 27017
+mongodb_bind_ip: 127.0.0.1
+mongodb_dbpath: /var/lib/mongodb
+mongodb_logpath: /var/log/mongodb/mongod.log
+mongodb_cache_size_gb: 0.5
+mongodb_slow_op_ms: 100
+mongodb_max_connections: 1000
+
+mongodb_admin_user: admin
+mongodb_admin_password: "{{ vault_mongodb_admin_password }}"
+
+lab_databases: [shop, library, university]
+lab_data_scale: 1
+
+# резервное копирование
+backup_dir: /var/backups/mongodb
+backup_keep: 5
+backup_user: backup_operator
+backup_password: "{{ vault_backup_password }}"
+backup_schedule: "*-*-* 02:30:00"
+
+# мониторинг
+exporter_user: mongodb_exporter
+exporter_password: "{{ vault_exporter_password }}"
+exporter_port: 9216
+node_exporter_port: 9100
+prometheus_port: 9090
+prometheus_scrape_interval: 5s
+grafana_port: 3000
+grafana_admin_password: "{{ vault_grafana_admin_password }}"
+
+# нагрузочный тест
+load_user: load_tester
+load_password: "{{ vault_load_password }}"
+load_workers: 4
+load_duration: 60
+load_pause: 20
+load_events_mb: 256
