@@ -1,0 +1,15 @@
+---
+mongodb_packages:
+  - mongodb-org
+  - mongodb-org-server
+  - mongodb-org-mongos
+  - mongodb-org-tools
+  - mongodb-mongosh
+
+mongodb_repo_ubuntu: >-
+  deb [arch=amd64,arm64 signed-by=/usr/share/keyrings/mongodb-server-{{ mongodb_version }}.asc]
+  https://repo.mongodb.org/apt/ubuntu {{ ansible_facts.distribution_release }}/mongodb-org/{{ mongodb_version }} multiverse
+mongodb_repo_debian: >-
+  deb [signed-by=/usr/share/keyrings/mongodb-server-{{ mongodb_version }}.asc]
+  https://repo.mongodb.org/apt/debian {{ ansible_facts.distribution_release }}/mongodb-org/{{ mongodb_version }} main
+mongodb_repo: "{{ mongodb_repo_ubuntu if ansible_facts.distribution == 'Ubuntu' else mongodb_repo_debian }}"
