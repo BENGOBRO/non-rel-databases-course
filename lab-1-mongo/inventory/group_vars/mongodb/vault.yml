@@ -1,0 +1,16 @@
+---
+# Пароли учебного стенда. В реальном окружении файл шифруется:
+#   ansible-vault encrypt inventory/group_vars/mongodb/vault.yml
+# и плейбуки запускаются с --ask-vault-pass (или --vault-password-file .vault_pass).
+vault_mongodb_admin_password: AdminPass123
+vault_backup_password: BackupPass123
+vault_exporter_password: ExporterPass123
+vault_grafana_admin_password: GrafanaPass123
+vault_load_password: LoadPass123
+
+# пароли учебных пользователей из rbac/*.yml
+vault_rbac_passwords:
+  shop_analyst: Analyst#2026
+  shop_manager: Manager#2026
+  library_clerk: Clerk#2026
+  univ_teacher: Teacher#2026

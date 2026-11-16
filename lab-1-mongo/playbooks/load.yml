@@ -1,0 +1,60 @@
+---
+# Нагрузочный тест: фазы write -> read -> scan -> mixed с паузами между ними.
+#   ansible-playbook playbooks/load.yml
+#   ansible-playbook playbooks/load.yml -e '{"phases": ["scan"]}' -e load_duration=30
+- name: Load test
+  hosts: mongodb
+  become: true
+  gather_facts: false
+  vars:
+    phases: [write, read, scan, mixed]
+    load_cleanup: true
+  module_defaults:
+    group/community.mongodb.mongodb:
+      login_port: "{{ mongodb_port }}"
+      login_user: "{{ mongodb_admin_user }}"
+      login_password: "{{ mongodb_admin_password }}"
+      login_database: admin
+  tasks:
+    - name: Load user (readWrite on shop only)
+      community.mongodb.mongodb_user:
+        database: admin
+        name: "{{ load_user }}"
+        password: "{{ load_password }}"
+        update_password: on_create
+        roles: [{db: shop, role: readWrite}]
+
+    - name: Load scripts
+      ansible.builtin.copy:
+        src: "load/{{ item }}"
+        dest: "/opt/mongo-lab/{{ item }}"
+        mode: "0644"
+      loop: [workload.js, counters.js]
+
+    # write пишет без пауз, поэтому коллекция событий ограничена по размеру
+    - name: Capped collection shop.load_events
+      community.mongodb.mongodb_shell:
+        db: shop
+        stringify: false
+        transform: raw
+        eval: >-
+          if (db.getCollectionNames().includes("load_events") && !db.load_events.isCapped()) db.load_events.drop();
+          if (!db.getCollectionNames().includes("load_events"))
+            db.createCollection("load_events", {capped: true, size: {{ load_events_mb }} * 1024 * 1024});
+          db.load_events.createIndex({ts: 1});
+      changed_when: false
+
+    - name: Phases
+      ansible.builtin.include_tasks: tasks/load_phase.yml
+      loop: "{{ phases }}"
+      loop_control:
+        loop_var: phase
+        index_var: phase_idx
+
+    - name: Drop test collection
+      community.mongodb.mongodb_shell:
+        db: shop
+        stringify: false
+        transform: raw
+        eval: db.load_events.drop()
+      when: load_cleanup | bool

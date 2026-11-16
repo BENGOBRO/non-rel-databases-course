@@ -1,0 +1,95 @@
+---
+# Переменные ролей prometheus.prometheus и grafana.grafana
+
+# Percona mongodb_exporter
+mongodb_exporter_version: 0.54.0
+mongodb_exporter_web_listen_address: "0.0.0.0:{{ exporter_port }}"
+mongodb_exporter_uri: "mongodb://{{ exporter_user }}:{{ exporter_password | urlencode }}@127.0.0.1:{{ mongodb_port }}/admin"
+mongodb_exporter_collectors: [diagnosticdata, dbstats, collstats, indexstats, topmetrics]
+mongodb_exporter_discovering_mode: true
+mongodb_exporter_compatible_mode: true
+
+node_exporter_web_listen_address: "0.0.0.0:{{ node_exporter_port }}"
+
+# Prometheus
+prometheus_web_listen_address: "0.0.0.0:{{ prometheus_port }}"
+prometheus_storage_retention: 7d
+prometheus_global:
+  scrape_interval: "{{ prometheus_scrape_interval }}"
+  scrape_timeout: 4s
+  evaluation_interval: 15s
+prometheus_external_labels: {}
+prometheus_targets: {}
+prometheus_scrape_configs:
+  - job_name: mongodb
+    static_configs:
+      - targets: ["localhost:{{ exporter_port }}"]
+        labels: {service: mongodb-lab}
+  - job_name: node
+    static_configs:
+      - targets: ["localhost:{{ node_exporter_port }}"]
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:{{ prometheus_port }}"]
+
+prometheus_alert_rules:
+  - alert: MongoDBExporterDown
+    expr: up{job="mongodb"} == 0
+    for: 1m
+    labels: {severity: critical}
+    annotations:
+      summary: "Экспортер MongoDB недоступен ({{ '{{' }} $labels.instance {{ '}}' }})"
+  - alert: MongoDBDown
+    expr: mongodb_up == 0
+    for: 30s
+    labels: {severity: critical}
+    annotations:
+      summary: "MongoDB не отвечает экспортеру ({{ '{{' }} $labels.instance {{ '}}' }})"
+  - alert: MongoDBManyConnections
+    expr: >-
+      mongodb_ss_connections{conn_type="current"}
+      / (mongodb_ss_connections{conn_type="current"} + mongodb_ss_connections{conn_type="available"}) > 0.8
+    for: 2m
+    labels: {severity: warning}
+    annotations:
+      summary: Использовано более 80% лимита подключений
+  - alert: MongoDBSlowReads
+    expr: >-
+      rate(mongodb_ss_opLatencies_latency{op_type="reads"}[1m])
+      / rate(mongodb_ss_opLatencies_ops{op_type="reads"}[1m]) > 100000
+    for: 2m
+    labels: {severity: warning}
+    annotations:
+      summary: Средняя задержка чтения выше 100 мс
+  - alert: MongoDBCollectionScans
+    expr: rate(mongodb_ss_metrics_queryExecutor_collectionScans_total[1m]) > 5
+    for: 1m
+    labels: {severity: info}
+    annotations:
+      summary: Много запросов без индекса (COLLSCAN)
+
+# Grafana
+grafana_version: latest
+grafana_ini:
+  server:
+    http_port: "{{ grafana_http_port }}"
+  security:
+    admin_user: admin
+    admin_password: "{{ grafana_admin_password }}"
+  dashboards:
+    default_home_dashboard_path: /var/lib/grafana/dashboards/mongodb-lab.json
+  analytics:
+    reporting_enabled: false
+    check_for_updates: false
+grafana_datasources:
+  - name: Prometheus
+    uid: prometheus
+    type: prometheus
+    access: proxy
+    url: "http://localhost:{{ prometheus_port }}"
+    isDefault: true
+    jsonData:
+      timeInterval: "{{ prometheus_scrape_interval }}"
+# дашборд подключается в playbooks/monitoring.yml: импорт каталога в роли 6.1.0
+# не работает с ansible-core 2.21 (regex_replace по списку)
+grafana_dashboards_dir: ""

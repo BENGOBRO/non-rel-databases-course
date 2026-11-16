@@ -1,0 +1,11 @@
+{{ ansible_managed | comment }}
+[Unit]
+Description=MongoDB backup of lab databases
+After=mongod.service
+Requires=mongod.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/mongo-backup all
+Nice=10
+IOSchedulingClass=idle

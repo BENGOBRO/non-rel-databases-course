@@ -1,0 +1,46 @@
+---
+# ansible-playbook playbooks/rbac.yml -e @rbac/01-initial.yml
+# Каждый файл в rbac/ — полное желаемое состояние ролей и пользователей
+# на очередном шаге задания; после применения печатается матрица доступа.
+- name: Part 2 - role model
+  hosts: mongodb
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Scenario loaded
+      ansible.builtin.assert:
+        that: rbac_roles is defined and rbac_users is defined
+        fail_msg: "Передайте сценарий: -e @rbac/01-initial.yml"
+        quiet: true
+
+    - name: Apply roles and users
+      ansible.builtin.include_role:
+        name: rbac
+
+    - name: Current users
+      community.mongodb.mongodb_shell:
+        login_port: "{{ mongodb_port }}"
+        login_user: "{{ mongodb_admin_user }}"
+        login_password: "{{ mongodb_admin_password }}"
+        login_database: admin
+        db: admin
+        stringify: false
+        transform: raw
+        eval: >-
+          db.getUsers().users.forEach(u => print(u.user.padEnd(18) +
+            u.roles.map(r => r.role + "@" + r.db).join(", ")))
+      register: rbac_users_out
+      changed_when: false
+
+    - name: Users and roles
+      ansible.builtin.debug:
+        msg: "{{ (rbac_users_out.transformed_output | string).splitlines() }}"
+
+    - name: Access checks
+      ansible.builtin.include_role:
+        name: rbac
+        tasks_from: check
+      loop: "{{ rbac_check | default([]) }}"
+      loop_control:
+        loop_var: check
+        label: "{{ check.user }}"

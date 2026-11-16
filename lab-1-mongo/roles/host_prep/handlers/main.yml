@@ -1,0 +1,6 @@
+---
+- name: Restart disable-thp
+  ansible.builtin.systemd_service:
+    name: disable-thp
+    state: restarted
+    daemon_reload: true

@@ -1,0 +1,36 @@
+---
+# Шаг 1: пользователи, собственные роли с разными наборами операций, назначение ролей
+rbac_roles:
+  - name: shopReader
+    db: shop
+    privileges:
+      - resource: {db: shop, collection: ""}
+        actions: [find, listCollections, collStats, dbStats]
+  - name: shopEditor
+    db: shop
+    privileges:
+      - resource: {db: shop, collection: ""}
+        actions: [find, insert, update, listCollections]
+  - name: gradeEditor
+    db: university
+    privileges:
+      - resource: {db: university, collection: ""}
+        actions: [find, listCollections]
+      - resource: {db: university, collection: enrollments}
+        actions: [update]
+
+rbac_users:
+  - name: shop_analyst
+    roles: [{role: shopReader, db: shop}]
+  - name: shop_manager
+    roles: [{role: shopEditor, db: shop}]
+  - name: univ_teacher
+    roles: [{role: gradeEditor, db: university}]
+  - name: library_clerk
+    roles: []
+
+rbac_check:
+  - {user: shop_analyst, db: shop, collections: [orders, products]}
+  - {user: shop_manager, db: shop, collections: [orders, products]}
+  - {user: univ_teacher, db: university, collections: [students, enrollments]}
+  - {user: library_clerk, db: library, collections: [loans, books]}

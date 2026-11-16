@@ -1,0 +1,73 @@
+#!/usr/bin/env bash
+{{ ansible_managed | comment }}
+#
+#   mongo-backup db <name>   копия одной базы       -> {{ backup_dir }}/db-<name>/<дата_время>/
+#   mongo-backup all         копия всех учебных баз -> {{ backup_dir }}/all/<дата_время>/
+#   mongo-backup list        список копий
+#
+# Каждая копия пишется в новый каталог с меткой времени (сначала *.partial,
+# переименование только после успешного mongodump), поэтому копии не
+# перезаписывают друг друга. Хранится {{ backup_keep }} последних копий каждой цели.
+set -euo pipefail
+
+DIR={{ backup_dir }}
+KEEP={{ backup_keep }}
+DBS=({{ lab_databases | join(' ') }})
+DUMP_ARGS=(--host 127.0.0.1 --port {{ mongodb_port }} --username {{ backup_user }}
+           --authenticationDatabase admin --config /etc/mongo-backup/tools.yml)
+
+list() {
+  printf '%-10s %-22s %6s  %s\n' TARGET COPY SIZE "DATABASES / DOCS"
+  find "$DIR" -mindepth 3 -maxdepth 3 -name manifest.json 2>/dev/null | sort | while read -r m; do
+    printf '%-10s %-22s %6s  %s\n' "$(jq -r .target "$m")" "$(basename "$(dirname "$m")")" \
+      "$(du -sh "$(dirname "$m")" | cut -f1)" \
+      "$(jq -r '(.databases | join(",")) + " / " + ([.collections[]] | add | tostring)' "$m")"
+  done
+}
+
+case ${1:-} in
+  db)   [[ -n ${2:-} ]] || { echo "usage: mongo-backup db <name>" >&2; exit 2; }
+        target=db-$2; dbs=("$2") ;;
+  all)  target=all; dbs=("${DBS[@]}") ;;
+  list) list; exit 0 ;;
+  *)    echo "usage: mongo-backup db <name> | all | list" >&2; exit 2 ;;
+esac
+
+base=$DIR/$target
+mkdir -p "$base"
+ts=$(date +%Y-%m-%d_%H-%M-%S)
+dest=$base/$ts
+n=1
+while [[ -e $dest || -e $dest.partial ]]; do n=$((n + 1)); dest=$base/${ts}_$n; done
+
+trap 'rm -rf "$dest.partial"' ERR
+start=$(date +%s)
+for d in "${dbs[@]}"; do
+  mongodump "${DUMP_ARGS[@]}" --gzip --quiet --db "$d" --out "$dest.partial"
+done
+mv "$dest.partial" "$dest"
+
+# число документов считается по самому дампу
+counts=$(for f in "$dest"/*/*.bson.gz; do
+  ns=$(basename "$(dirname "$f")").$(basename "$f" .bson.gz)
+  [[ $ns == *.system.* ]] && continue
+  printf '%s\t%s\n' "$ns" "$(gunzip -c "$f" | bsondump --quiet 2>/dev/null | wc -l)"
+done | jq -Rn '[inputs | split("\t") | {(.[0]): (.[1] | tonumber)}] | add // {}')
+
+jq -n --arg target "$target" --arg created "$(date -Iseconds)" --arg host "$(hostname)" \
+      --argjson dbs "$(printf '%s\n' "${dbs[@]}" | jq -R . | jq -s .)" \
+      --argjson size "$(du -sb "$dest" | cut -f1)" --argjson secs "$(( $(date +%s) - start ))" \
+      --argjson counts "$counts" \
+      '{target: $target, created: $created, host: $host, databases: $dbs,
+        duration_sec: $secs, size_bytes: $size, collections: $counts}' > "$dest/manifest.json"
+echo "backup $target -> $dest ($(du -sh "$dest" | cut -f1))"
+
+# ротация
+mapfile -t copies < <(find "$base" -mindepth 1 -maxdepth 1 -type d ! -name '*.partial' | sort)
+{% raw %}
+extra=$(( ${#copies[@]} - KEEP ))
+{% endraw %}
+for (( i = 0; i < extra; i++ )); do
+  rm -rf "${copies[i]}"
+  echo "rotate: removed ${copies[i]}"
+done

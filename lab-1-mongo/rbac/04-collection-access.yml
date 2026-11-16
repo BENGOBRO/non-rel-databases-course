@@ -1,0 +1,38 @@
+---
+# Шаг 4: доступ только к одной коллекции — library_clerk работает с library.loans
+rbac_roles:
+  - name: shopReader
+    db: shop
+    privileges:
+      - resource: {db: shop, collection: ""}
+        actions: [find, listCollections, collStats, dbStats]
+  - name: shopEditor
+    db: shop
+    privileges:
+      - resource: {db: shop, collection: ""}
+        actions: [find, insert, remove, listCollections]
+  - name: gradeEditor
+    db: university
+    privileges:
+      - resource: {db: university, collection: ""}
+        actions: [find, listCollections]
+      - resource: {db: university, collection: enrollments}
+        actions: [update]
+  - name: loansWriter
+    db: library
+    privileges:
+      - resource: {db: library, collection: loans}
+        actions: [find, insert, update, remove, collStats]
+
+rbac_users:
+  - name: shop_analyst
+    roles: [{role: shopReader, db: shop}]
+  - name: shop_manager
+    roles: [{role: shopEditor, db: shop}]
+  - name: univ_teacher
+    roles: [{role: gradeEditor, db: university}]
+  - name: library_clerk
+    roles: [{role: loansWriter, db: library}]
+
+rbac_check:
+  - {user: library_clerk, db: library, collections: [loans, books, authors]}

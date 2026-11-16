@@ -1,0 +1,7 @@
+---
+host_prep_sysctl:
+  vm.swappiness: 1
+  vm.max_map_count: 262144
+  net.core.somaxconn: 4096
+
+host_prep_pymongo: "pymongo>=4.6,<5"

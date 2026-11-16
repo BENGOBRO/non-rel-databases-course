@@ -1,0 +1,87 @@
+---
+# Проверка цепочки mongod -> exporter -> Prometheus -> Grafana
+- name: Monitoring check
+  hosts: mongodb
+  become: true
+  gather_facts: false
+  vars:
+    required_metrics:
+      - mongodb_up
+      - mongodb_ss_opcounters
+      - mongodb_ss_connections
+      - mongodb_ss_opLatencies_latency
+      - mongodb_ss_metrics_document
+      - mongodb_ss_metrics_queryExecutor_scannedObjects
+      - mongodb_ss_wt_cache_bytes_currently_in_the_cache
+      - mongodb_ss_network_bytesIn
+      - mongodb_dbstats_dataSize
+  tasks:
+    - name: Service facts
+      ansible.builtin.service_facts:
+
+    - name: Services are running
+      ansible.builtin.assert:
+        that: ansible_facts.services[item ~ '.service'].state | default('') == 'running'
+        fail_msg: "{{ item }} is not running"
+        quiet: true
+      loop: [mongod, mongodb_exporter, node_exporter, prometheus, grafana-server]
+
+    - name: Exporter metrics
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:{{ exporter_port }}/metrics"
+        return_content: true
+      register: mon_metrics
+
+    - name: Required metrics present, mongodb_up = 1
+      ansible.builtin.assert:
+        that:
+          - mon_metrics.content is search('(?m)^' ~ item ~ '[{ ]')
+          - mon_metrics.content is search('(?m)^mongodb_up(\{[^}]*\})? 1$')
+        quiet: true
+      loop: "{{ required_metrics }}"
+
+    - name: Prometheus targets
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:{{ prometheus_port }}/api/v1/targets?state=active"
+      register: mon_targets
+      retries: 6
+      delay: 5
+      until: mon_targets.json.data.activeTargets | rejectattr('health', 'eq', 'up') | list | length == 0
+
+    - name: Current load
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:{{ prometheus_port }}/api/v1/query?query={{ 'sum(rate(mongodb_ss_opcounters[1m]))' | urlencode }}"
+      register: mon_ops
+
+    - name: Grafana health
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:{{ grafana_http_port }}/api/health"
+      register: mon_grafana
+      retries: 10
+      delay: 3
+      until: mon_grafana.status == 200
+
+    - name: Dashboard provisioned
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:{{ grafana_http_port }}/api/dashboards/uid/mongodb-lab"
+        user: admin
+        password: "{{ grafana_admin_password }}"
+        force_basic_auth: true
+      register: mon_dash
+
+    - name: Datasource works
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:{{ grafana_http_port }}/api/datasources/uid/prometheus/health"
+        user: admin
+        password: "{{ grafana_admin_password }}"
+        force_basic_auth: true
+
+    - name: Summary
+      ansible.builtin.debug:
+        msg:
+          - "targets: {{ targets | map(attribute='labels.job') | zip(targets | map(attribute='health')) | map('join', '=') | join(', ') }}"
+          - "ops/s now: {{ (mon_ops.json.data.result[0].value[1] | float) | round(1) if mon_ops.json.data.result else 0 }}"
+          - "grafana {{ mon_grafana.json.version }}, dashboard: {{ mon_dash.json.dashboard.title }}"
+          - "http://{{ ansible_host }}:{{ grafana_http_port }}/d/mongodb-lab"
+      vars:
+        targets: "{{ mon_targets.json.data.activeTargets }}"

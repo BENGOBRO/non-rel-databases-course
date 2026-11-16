@@ -1,0 +1,30 @@
+---
+- name: Lab dir
+  ansible.builtin.file:
+    path: /opt/mongo-lab
+    state: directory
+    mode: "0755"
+
+- name: Seed script
+  ansible.builtin.copy:
+    src: seed.js
+    dest: /opt/mongo-lab/seed.js
+    mode: "0644"
+
+- name: Seed lab databases
+  community.mongodb.mongodb_shell:
+    login_port: "{{ mongodb_port }}"
+    login_user: "{{ mongodb_admin_user }}"
+    login_password: "{{ mongodb_admin_password }}"
+    login_database: admin
+    db: admin
+    file: /opt/mongo-lab/seed.js
+    transform: raw
+  environment:
+    SCALE: "{{ lab_data_scale }}"
+  register: lab_data_seed
+  changed_when: "'created' in lab_data_seed.transformed_output | string"
+
+- name: Seed result
+  ansible.builtin.debug:
+    msg: "{{ lab_data_seed.transformed_output | string | trim }}"

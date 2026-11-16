@@ -1,0 +1,87 @@
+---
+- name: "Pause before phase {{ phase }}"
+  ansible.builtin.pause:
+    seconds: "{{ load_pause }}"
+  when: phase_idx > 0
+
+- name: "Counters before {{ phase }}"
+  community.mongodb.mongodb_shell:
+    db: admin
+    stringify: false
+    transform: json
+    file: /opt/mongo-lab/counters.js
+  register: load_before
+  changed_when: false
+
+- name: Start time
+  ansible.builtin.command: date +%s%3N
+  register: load_start
+  changed_when: false
+
+- name: "Start workers for {{ phase }}"
+  ansible.builtin.command:
+    argv: [mongosh, --quiet, --port, "{{ mongodb_port }}", -u, "{{ load_user }}", -p, "{{ load_password }}",
+           --authenticationDatabase, admin, shop, /opt/mongo-lab/workload.js]
+  environment:
+    PHASE: "{{ phase }}"
+    DURATION: "{{ load_duration }}"
+    WORKER: "{{ item }}"
+  loop: "{{ range(1, load_workers | int + 1) | list }}"
+  async: "{{ load_duration | int + 120 }}"
+  poll: 0
+  register: load_jobs
+  changed_when: false
+
+- name: "Wait for {{ phase }}"
+  ansible.builtin.async_status:
+    jid: "{{ item.ansible_job_id }}"
+  loop: "{{ load_jobs.results }}"
+  loop_control:
+    label: "worker {{ item.item }}"
+  register: load_done
+  until: load_done.finished
+  retries: "{{ (load_duration | int) // 5 + 30 }}"
+  delay: 5
+
+- name: End time
+  ansible.builtin.command: date +%s%3N
+  register: load_end
+  changed_when: false
+
+- name: "Counters after {{ phase }}"
+  community.mongodb.mongodb_shell:
+    db: admin
+    stringify: false
+    transform: json
+    file: /opt/mongo-lab/counters.js
+  register: load_after
+  changed_when: false
+
+- name: "Summary: {{ phase }}"
+  ansible.builtin.debug:
+    msg:
+      - "{{ secs }} s: insert {{ d['insert'] }}, query {{ d['query'] }}, update {{ d['update'] }}, delete {{ d['delete'] }}"
+      - "ops/s ~ {{ ((d['insert'] + d['query'] + d['update'] + d['delete']) / secs) | int }}, COLLSCAN {{ d['collscans'] }},
+         scanned {{ d['scannedObjects'] }}, returned {{ d['returned'] }}"
+      - "avg read latency {{ ((d['readLatUs'] / d['readOps']) if d['readOps'] > 0 else 0) | round(2) }} us"
+  vars:
+    a: "{{ load_before.transformed_output }}"
+    b: "{{ load_after.transformed_output }}"
+    secs: "{{ [((load_end.stdout | int) - (load_start.stdout | int)) // 1000, 1] | max }}"
+    d: >-
+      {% set r = {} %}{% for k in b %}{% set _ = r.update({k: b[k] - a[k]}) %}{% endfor %}{{ r }}
+
+- name: Grafana annotation
+  ansible.builtin.uri:
+    url: "http://127.0.0.1:{{ grafana_http_port }}/api/annotations"
+    method: POST
+    user: admin
+    password: "{{ grafana_admin_password }}"
+    force_basic_auth: true
+    body_format: json
+    body:
+      time: "{{ load_start.stdout | int }}"
+      timeEnd: "{{ load_end.stdout | int }}"
+      tags: [load, "{{ phase }}"]
+      text: "Нагрузка: фаза {{ phase }}, процессов: {{ load_workers }}"
+  failed_when: false
