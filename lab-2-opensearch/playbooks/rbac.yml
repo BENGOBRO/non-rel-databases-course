@@ -1,0 +1,13 @@
+---
+- name: Part 2 - role model
+  hosts: hot[0]
+  become: true
+  gather_facts: false
+  roles:
+    - rbac
+  post_tasks:
+    - name: Check access
+      ansible.builtin.include_role:
+        name: rbac
+        tasks_from: check.yml
+      when: rbac_check | default(true) | bool

@@ -1,0 +1,66 @@
+---
+- name: Installed packages
+  ansible.builtin.package_facts:
+
+# apt вызывается только если чего-то не хватает: повторный запуск не зависит от сети
+- name: Packages
+  ansible.builtin.apt:
+    name: "{{ lab_host_packages }}"
+    update_cache: true
+  when: lab_host_packages | difference(ansible_facts.packages.keys()) | length > 0
+
+# cloud-init (manage_etc_hosts) пересобирает /etc/hosts из шаблона при каждой загрузке,
+# поэтому записи добавляются и в шаблон - иначе после перезагрузки узлы не найдут друг друга
+- name: Lab hosts in /etc/hosts and cloud-init template
+  ansible.builtin.blockinfile:
+    path: "{{ item }}"
+    marker: "# {mark} nrdb-lab"
+    block: |
+      {% for h in groups['lab'] %}
+      {{ hostvars[h].ansible_host }} {{ h }}
+      {% endfor %}
+  loop: [/etc/hosts, /etc/cloud/templates/hosts.debian.tmpl]
+
+- name: CA dir
+  ansible.builtin.file:
+    path: "{{ ca_cert_path | dirname }}"
+    state: directory
+    mode: "0755"
+
+- name: Lab CA
+  ansible.builtin.copy:
+    src: "{{ pki_dir }}/ca.pem"
+    dest: "{{ ca_cert_path }}"
+    mode: "0644"
+
+# чтобы curl и Python на ВМ доверяли сертификатам кластера
+- name: Lab CA in system trust store
+  ansible.builtin.copy:
+    src: "{{ pki_dir }}/ca.pem"
+    dest: /usr/local/share/ca-certificates/nrdb-lab-ca.crt
+    mode: "0644"
+  notify: Update CA certificates
+
+# ВМ на ноутбуке: после сна хоста часы отстают на часы, а chrony по умолчанию
+# исправляет скачком только первые три измерения после запуска
+- name: Chrony steps the clock at any offset
+  ansible.builtin.copy:
+    dest: /etc/chrony/conf.d/makestep.conf
+    mode: "0644"
+    content: |
+      makestep 1 -1
+  notify: Restart chrony
+
+- name: Apply pending handlers
+  ansible.builtin.meta: flush_handlers
+
+# NTP бывает недоступен (VPN на хосте): тогда часы выставляются по управляющей машине
+- name: Clock of the VM
+  ansible.builtin.command: date +%s
+  register: lab_host_clock
+  changed_when: false
+
+- name: Set clock from control machine
+  ansible.builtin.command: date -u -s @{{ lookup('pipe', 'date +%s') }}
+  when: (lab_host_clock.stdout | int - lookup('pipe', 'date +%s') | int) | abs > 5
+  changed_when: true

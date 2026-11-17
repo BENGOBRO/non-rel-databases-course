@@ -1,0 +1,23 @@
+server.host: 0.0.0.0
+server.port: {{ dashboards_port }}
+server.name: {{ inventory_hostname }}
+
+# HTTPS для браузера
+server.ssl.enabled: true
+server.ssl.certificate: {{ dashboards_conf_dir }}/certs/dashboards.pem
+server.ssl.key: {{ dashboards_conf_dir }}/certs/dashboards.key
+
+# подключение к кластеру по TLS с проверкой сертификата
+opensearch.hosts:
+{% for h in groups['hot'] %}
+  - https://{{ h }}:{{ opensearch_http_port }}
+{% endfor %}
+opensearch.ssl.verificationMode: full
+opensearch.ssl.certificateAuthorities: [{{ dashboards_conf_dir }}/certs/ca.pem]
+opensearch.username: kibanaserver
+opensearch.password: "{{ kibanaserver_password }}"
+opensearch.requestHeadersAllowlist: [authorization, securitytenant]
+
+opensearch_security.cookie.secure: true
+opensearch_security.multitenancy.enabled: false
+opensearch_security.readonly_mode.roles: [kibana_read_only]

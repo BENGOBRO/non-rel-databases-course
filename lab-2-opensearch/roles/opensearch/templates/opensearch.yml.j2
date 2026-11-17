@@ -1,0 +1,51 @@
+cluster.name: {{ opensearch_cluster_name }}
+node.name: {{ inventory_hostname }}
+node.roles: [{{ opensearch_node_roles | join(', ') }}]
+# уровень хранения: шаблон индекса и политика ISM размещают шарды по этому атрибуту
+node.attr.temp: {{ opensearch_node_temp }}
+
+path.data: /var/lib/opensearch
+path.logs: /var/log/opensearch
+bootstrap.memory_lock: true
+
+network.host: ["{{ ansible_host }}", _local_]
+network.publish_host: {{ ansible_host }}
+http.port: {{ opensearch_http_port }}
+transport.port: {{ opensearch_transport_port }}
+
+discovery.seed_hosts: [{{ groups['opensearch'] | join(', ') }}]
+cluster.initial_cluster_manager_nodes: [{{ opensearch_cluster_managers | join(', ') }}]
+
+# TLS между узлами (транспорт)
+plugins.security.ssl.transport.pemcert_filepath: certs/node.pem
+plugins.security.ssl.transport.pemkey_filepath: certs/node.key
+plugins.security.ssl.transport.pemtrustedcas_filepath: certs/ca.pem
+plugins.security.ssl.transport.enforce_hostname_verification: true
+plugins.security.ssl.transport.enabled_protocols: [TLSv1.3, TLSv1.2]
+
+# TLS для REST API
+plugins.security.ssl.http.enabled: true
+plugins.security.ssl.http.pemcert_filepath: certs/node.pem
+plugins.security.ssl.http.pemkey_filepath: certs/node.key
+plugins.security.ssl.http.pemtrustedcas_filepath: certs/ca.pem
+plugins.security.ssl.http.enabled_protocols: [TLSv1.3, TLSv1.2]
+
+plugins.security.nodes_dn:
+  - "{{ pki_nodes_dn }}"
+plugins.security.authcz.admin_dn:
+  - "{{ pki_admin_dn }}"
+plugins.security.allow_default_init_securityindex: true
+plugins.security.restapi.roles_enabled: [all_access, security_rest_api_access]
+plugins.security.system_indices.enabled: true
+plugins.security.enable_snapshot_restore_privilege: true
+plugins.security.check_snapshot_restore_write_privileges: true
+
+# ISM проверяет условия политик раз в минуту (по умолчанию раз в 5 минут)
+# и без случайной задержки запуска (по умолчанию до 60% интервала)
+plugins.index_state_management.job_interval: {{ ism_job_interval }}
+plugins.index_state_management.jitter: 0.0
+
+# плагин prometheus-exporter: каждый узел отдаёт только свои метрики
+prometheus.nodes.filter: "_local"
+prometheus.indices: true
+prometheus.cluster.settings: true

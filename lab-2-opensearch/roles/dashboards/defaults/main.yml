@@ -1,0 +1,4 @@
+---
+dashboards_deb: "opensearch-dashboards-{{ dashboards_version }}-linux-{{ deb_arch }}.deb"
+dashboards_deb_url: "https://artifacts.opensearch.org/releases/bundle/opensearch-dashboards/{{ dashboards_version }}/{{ dashboards_deb }}"
+dashboards_conf_dir: /etc/opensearch-dashboards

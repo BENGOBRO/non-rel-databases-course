@@ -1,0 +1,13 @@
+[server]
+http_port = {{ grafana_http_port }}
+
+[security]
+admin_user = admin
+admin_password = {{ grafana_admin_password }}
+
+[dashboards]
+default_home_dashboard_path = /var/lib/grafana/dashboards/opensearch-lab.json
+
+[analytics]
+reporting_enabled = false
+check_for_updates = false

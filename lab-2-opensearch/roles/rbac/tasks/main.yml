@@ -1,0 +1,96 @@
+---
+- name: Current roles
+  ansible.builtin.uri:
+    url: "{{ opensearch_url }}/_plugins/_security/api/roles"
+    user: "{{ admin_user }}"
+    password: "{{ admin_password }}"
+    force_basic_auth: true
+    ca_path: "{{ ca_cert_path }}"
+  register: rbac_cur_roles
+
+- name: Roles
+  ansible.builtin.uri:
+    url: "{{ opensearch_url }}/_plugins/_security/api/roles/{{ item.name }}"
+    method: PUT
+    user: "{{ admin_user }}"
+    password: "{{ admin_password }}"
+    force_basic_auth: true
+    ca_path: "{{ ca_cert_path }}"
+    body_format: json
+    body:
+      description: "{{ item.description }}"
+      cluster_permissions: "{{ item.cluster_permissions }}"
+      index_permissions: "{{ item.index_permissions }}"
+    status_code: [200, 201]
+  loop: "{{ rbac_roles }}"
+  loop_control:
+    label: "{{ item.name }}"
+  vars:
+    cur: "{{ rbac_cur_roles.json[item.name] | default({}) }}"
+    cur_index: >-
+      {%- set perms = [] -%}
+      {%- for p in cur.index_permissions | default([]) -%}
+      {%- set _ = perms.append({'index_patterns': p.index_patterns, 'allowed_actions': p.allowed_actions}) -%}
+      {%- endfor -%}
+      {{ perms }}
+  when: >-
+    cur.cluster_permissions | default(none) != item.cluster_permissions
+    or cur_index != item.index_permissions
+  changed_when: true
+
+- name: Current users
+  ansible.builtin.uri:
+    url: "{{ opensearch_url }}/_plugins/_security/api/internalusers"
+    user: "{{ admin_user }}"
+    password: "{{ admin_password }}"
+    force_basic_auth: true
+    ca_path: "{{ ca_cert_path }}"
+  register: rbac_cur_users
+
+- name: Users
+  ansible.builtin.uri:
+    url: "{{ opensearch_url }}/_plugins/_security/api/internalusers/{{ item.name }}"
+    method: PUT
+    user: "{{ admin_user }}"
+    password: "{{ admin_password }}"
+    force_basic_auth: true
+    ca_path: "{{ ca_cert_path }}"
+    body_format: json
+    body:
+      password: "{{ item.password }}"
+      description: "{{ item.description }}"
+    status_code: [200, 201]
+  loop: "{{ rbac_users }}"
+  loop_control:
+    label: "{{ item.name }}"
+  when: item.name not in rbac_cur_users.json
+  changed_when: true
+
+- name: Current role mappings
+  ansible.builtin.uri:
+    url: "{{ opensearch_url }}/_plugins/_security/api/rolesmapping"
+    user: "{{ admin_user }}"
+    password: "{{ admin_password }}"
+    force_basic_auth: true
+    ca_path: "{{ ca_cert_path }}"
+  register: rbac_cur_map
+
+- name: Role mappings
+  ansible.builtin.uri:
+    url: "{{ opensearch_url }}/_plugins/_security/api/rolesmapping/{{ item.name }}"
+    method: PUT
+    user: "{{ admin_user }}"
+    password: "{{ admin_password }}"
+    force_basic_auth: true
+    ca_path: "{{ ca_cert_path }}"
+    body_format: json
+    body:
+      users: "{{ members }}"
+    status_code: [200, 201]
+  loop: "{{ rbac_roles }}"
+  loop_control:
+    label: "{{ item.name }} <- {{ members | join(', ') }}"
+  vars:
+    members: "{{ rbac_users | selectattr('role', 'eq', item.name) | map(attribute='name') | sort }}"
+  when: (rbac_cur_map.json[item.name].users | default([]) | sort) != members
+  changed_when: true

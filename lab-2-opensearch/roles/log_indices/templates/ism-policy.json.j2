@@ -1,0 +1,33 @@
+{
+  "policy": {
+    "description": "nginx logs: rollover at {{ logs_rollover_size }} or {{ logs_rollover_age }}, move to warm, delete after {{ logs_delete_age }}",
+    "default_state": "hot",
+    "states": [
+      {
+        "name": "hot",
+        "actions": [
+          {"rollover": {"min_size": "{{ logs_rollover_size }}", "min_index_age": "{{ logs_rollover_age }}"}}
+        ],
+        "transitions": [{"state_name": "warm"}]
+      },
+      {
+        "name": "warm",
+        "actions": [
+          {"replica_count": {"number_of_replicas": 0}},
+          {"allocation": {"require": {"temp": "warm"}, "wait_for": false}}
+        ],
+        "transitions": [
+          {"state_name": "delete", "conditions": {"min_index_age": "{{ logs_delete_age }}"}}
+        ]
+      },
+      {
+        "name": "delete",
+        "actions": [{"delete": {}}],
+        "transitions": []
+      }
+    ],
+    "ism_template": [
+      {"index_patterns": ["{{ logs_data_stream }}*"], "priority": 100}
+    ]
+  }
+}

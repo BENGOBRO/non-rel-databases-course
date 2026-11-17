@@ -1,0 +1,15 @@
+---
+# Полное развёртывание стенда: ansible-playbook site.yml
+- name: Part 1 - cluster, TLS, Dashboards
+  ansible.builtin.import_playbook: playbooks/cluster.yml
+
+- name: Part 2 - role model
+  ansible.builtin.import_playbook: playbooks/rbac.yml
+  vars:
+    rbac_check: false
+
+- name: Part 3 - logs
+  ansible.builtin.import_playbook: playbooks/logging.yml
+
+- name: Part 4 - monitoring
+  ansible.builtin.import_playbook: playbooks/monitoring.yml

@@ -1,0 +1,26 @@
+---
+- name: "Key {{ cert.name }}"
+  community.crypto.openssl_privatekey:
+    path: "{{ pki_dir }}/{{ cert.name }}.key"
+    type: RSA
+    size: 2048
+    format: pkcs8
+
+- name: "CSR {{ cert.name }}"
+  community.crypto.openssl_csr_pipe:
+    privatekey_path: "{{ pki_dir }}/{{ cert.name }}.key"
+    subject_ordered: "{{ cert.subject }}"
+    subject_alt_name: "{{ cert.san | default(omit) }}"
+    extended_key_usage: [serverAuth, clientAuth]
+    key_usage: [digitalSignature, keyEncipherment]
+  register: pki_csr
+  changed_when: false
+
+- name: "Certificate {{ cert.name }}"
+  community.crypto.x509_certificate:
+    path: "{{ pki_dir }}/{{ cert.name }}.pem"
+    csr_content: "{{ pki_csr.csr }}"
+    provider: ownca
+    ownca_path: "{{ pki_dir }}/ca.pem"
+    ownca_privatekey_path: "{{ pki_dir }}/ca.key"
+    ownca_not_after: "+{{ pki_days }}d"

@@ -1,0 +1,77 @@
+---
+# Переменные ролей prometheus.prometheus и grafana
+
+node_exporter_web_listen_address: "0.0.0.0:{{ node_exporter_port }}"
+
+# Prometheus опрашивает плагин prometheus-exporter на каждом узле по HTTPS
+# под пользователем с ролью metrics_monitor
+prometheus_web_listen_address: "0.0.0.0:{{ prometheus_port }}"
+prometheus_storage_retention: 7d
+prometheus_global:
+  scrape_interval: "{{ prometheus_scrape_interval }}"
+  scrape_timeout: 8s
+  evaluation_interval: 15s
+prometheus_external_labels: {}
+prometheus_targets: {}
+prometheus_scrape_configs:
+  - job_name: opensearch
+    scheme: https
+    metrics_path: /_prometheus/metrics
+    basic_auth:
+      username: "{{ monitor_user }}"
+      password: "{{ monitor_password }}"
+    tls_config:
+      ca_file: "{{ ca_cert_path }}"
+    static_configs:
+      - targets: "{{ groups['hot'] | map('regex_replace', '$', ':' ~ opensearch_http_port) | list }}"
+        labels: {temp: hot}
+      - targets: "{{ groups['warm'] | map('regex_replace', '$', ':' ~ opensearch_http_port) | list }}"
+        labels: {temp: warm}
+  - job_name: node
+    static_configs:
+      - targets: "{{ groups['lab'] | map('regex_replace', '$', ':' ~ node_exporter_port) | list }}"
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:{{ prometheus_port }}"]
+
+prometheus_alert_rules:
+  - alert: OpenSearchNodeDown
+    expr: up{job="opensearch"} == 0
+    for: 1m
+    labels: {severity: critical}
+    annotations:
+      summary: "Узел OpenSearch не отдаёт метрики ({{ '{{' }} $labels.instance {{ '}}' }})"
+  - alert: OpenSearchClusterNotGreen
+    expr: max(opensearch_cluster_status) > 0
+    for: 2m
+    labels: {severity: warning}
+    annotations:
+      summary: Состояние кластера не green
+  - alert: OpenSearchUnassignedShards
+    expr: max(opensearch_cluster_shards_number{type="unassigned"}) > 0
+    for: 2m
+    labels: {severity: warning}
+    annotations:
+      summary: Есть неразмещённые шарды
+  - alert: OpenSearchHeapHigh
+    expr: opensearch_jvm_mem_heap_used_percent > 90
+    for: 5m
+    labels: {severity: warning}
+    annotations:
+      summary: "Куча JVM занята более чем на 90% ({{ '{{' }} $labels.node {{ '}}' }})"
+  - alert: OpenSearchDiskLow
+    expr: opensearch_fs_path_available_bytes / opensearch_fs_path_total_bytes < 0.15
+    for: 5m
+    labels: {severity: warning}
+    annotations:
+      summary: "Свободно менее 15% диска ({{ '{{' }} $labels.node {{ '}}' }})"
+  - alert: OpenSearchWriteRejections
+    expr: rate(opensearch_threadpool_threads_count{name="write", type="rejected"}[1m]) > 0
+    for: 1m
+    labels: {severity: warning}
+    annotations:
+      summary: "Пул записи отклоняет запросы ({{ '{{' }} $labels.node {{ '}}' }})"
+
+# Grafana (собственная роль grafana: пакет ставится из локального кэша)
+grafana_version: 13.3.1
+grafana_build: "42849527790"

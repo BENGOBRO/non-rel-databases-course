@@ -1,0 +1,17 @@
+# одна запись журнала - один JSON-объект в строке
+log_format json_lab escape=json
+  '{'
+    '"time":"$time_iso8601",'
+    '"remote_addr":"$remote_addr",'
+    '"method":"$request_method",'
+    '"uri":"$uri",'
+    '"args":"$args",'
+    '"protocol":"$server_protocol",'
+    '"status":$status,'
+    '"bytes_sent":$body_bytes_sent,'
+    '"request_time":$request_time,'
+    '"referer":"$http_referer",'
+    '"user_agent":"$http_user_agent",'
+    '"host":"$host",'
+    '"request_id":"$request_id"'
+  '}';

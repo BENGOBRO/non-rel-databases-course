@@ -1,0 +1,33 @@
+{
+  "index_patterns": ["{{ logs_data_stream }}*"],
+  "data_stream": {"timestamp_field": {"name": "@timestamp"}},
+  "priority": 200,
+  "template": {
+    "settings": {
+      "index.number_of_shards": 1,
+      "index.number_of_replicas": 1,
+      "index.refresh_interval": "5s",
+      "index.routing.allocation.require.temp": "hot"
+    },
+    "mappings": {
+      "dynamic": false,
+      "properties": {
+        "@timestamp": {"type": "date"},
+        "remote_addr": {"type": "ip"},
+        "method": {"type": "keyword"},
+        "uri": {"type": "keyword", "fields": {"text": {"type": "text"}}},
+        "args": {"type": "keyword", "ignore_above": 1024},
+        "protocol": {"type": "keyword"},
+        "status": {"type": "short"},
+        "bytes_sent": {"type": "long"},
+        "request_time": {"type": "float"},
+        "referer": {"type": "keyword", "ignore_above": 1024},
+        "user_agent": {"type": "text", "fields": {"keyword": {"type": "keyword", "ignore_above": 512}}},
+        "host": {"type": "keyword"},
+        "request_id": {"type": "keyword"},
+        "server": {"type": "keyword"}
+      }
+    }
+  },
+  "_meta": {"description": "nginx access logs in JSON, shipped by Fluent Bit"}
+}

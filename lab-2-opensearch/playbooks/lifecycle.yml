@@ -1,0 +1,18 @@
+---
+# Что сейчас происходит с индексами логов: размер, возраст, узел, шаг политики
+- name: Part 3 - log indices lifecycle
+  hosts: hot[0]
+  gather_facts: false
+  tasks:
+    - name: Data stream state
+      ansible.builtin.script:
+        cmd: >-
+          files/lifecycle.py {{ opensearch_url }} {{ ca_cert_path }}
+          {{ admin_user }} {{ admin_password }} {{ logs_data_stream }}
+        executable: python3
+      register: lifecycle
+      changed_when: false
+
+    - name: Indices
+      ansible.builtin.debug:
+        msg: "{{ lifecycle.stdout_lines }}"

@@ -1,0 +1,3 @@
+---
+opensearch_node_roles: [cluster_manager, data]
+opensearch_node_temp: warm

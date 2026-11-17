@@ -1,0 +1,7 @@
+---
+grafana_deb: "grafana_{{ grafana_version }}_{{ grafana_build }}_linux_{{ grafana_arch }}.deb"
+grafana_deb_url: "https://apt.grafana.com/pool/main/g/grafana/{{ grafana_deb }}"
+grafana_arch: "{{ {'aarch64': 'arm64', 'x86_64': 'amd64'}[ansible_facts.architecture] }}"
+# зависимость пакета grafana, которой нет в базовом образе Ubuntu
+grafana_musl_deb: "musl_1.2.4-2_{{ grafana_arch }}.deb"
+grafana_musl_url: "http://ports.ubuntu.com/ubuntu-ports/pool/universe/m/musl/{{ grafana_musl_deb }}"

@@ -1,0 +1,6 @@
+---
+- name: Part 1 - certificates
+  hosts: localhost
+  gather_facts: false
+  roles:
+    - pki

@@ -1,0 +1,19 @@
+---
+# Нагрузка на страницу nginx: -e duration=120 -e rps=50
+- name: Part 3 - traffic
+  hosts: ops
+  gather_facts: false
+  vars:
+    duration: 120
+    rps: 50
+  tasks:
+    - name: Requests to nginx
+      ansible.builtin.script:
+        cmd: files/traffic.py http://127.0.0.1 {{ duration }} {{ rps }}
+        executable: python3
+      register: traffic
+      changed_when: false
+
+    - name: Result
+      ansible.builtin.debug:
+        msg: "{{ traffic.stdout_lines }}"

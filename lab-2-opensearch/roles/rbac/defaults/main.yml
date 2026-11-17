@@ -1,0 +1,47 @@
+---
+rbac_roles:
+  # запись только в data stream логов: без чтения, без удаления, без управления индексами
+  - name: logs_writer
+    description: Write-only access to the logs data stream
+    cluster_permissions:
+      - indices:data/write/bulk
+    index_permissions:
+      - index_patterns: ["{{ logs_data_stream }}"]
+        allowed_actions:
+          - indices:data/write/bulk*
+          - indices:data/write/index
+
+  # только чтение индексов logs*
+  - name: logs_reader
+    description: Read-only access to logs* indices
+    cluster_permissions: []
+    index_permissions:
+      - index_patterns: ["logs*"]
+        allowed_actions: [read]
+
+  # минимум для сбора метрик: /_prometheus/metrics и то, что плагин запрашивает внутри
+  - name: metrics_monitor
+    description: Cluster and node metrics for Prometheus
+    cluster_permissions:
+      - cluster:monitor/prometheus/metrics
+      - cluster:monitor/health
+      - cluster:monitor/state
+      - cluster:monitor/nodes/info
+      - cluster:monitor/nodes/stats
+    index_permissions:
+      - index_patterns: ["*"]
+        allowed_actions: [indices:monitor/stats]
+
+rbac_users:
+  - name: "{{ logs_writer_user }}"
+    password: "{{ logs_writer_password }}"
+    role: logs_writer
+    description: Fluent Bit log shipper
+  - name: "{{ logs_reader_user }}"
+    password: "{{ logs_reader_password }}"
+    role: logs_reader
+    description: Log analyst
+  - name: "{{ monitor_user }}"
+    password: "{{ monitor_password }}"
+    role: metrics_monitor
+    description: Prometheus scraper

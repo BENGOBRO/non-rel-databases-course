@@ -1,0 +1,49 @@
+---
+- name: Part 3 - index template, ISM policy, data stream
+  hosts: hot[0]
+  become: true
+  gather_facts: false
+  roles:
+    - log_indices
+
+- name: Part 3 - nginx and Fluent Bit
+  hosts: ops
+  become: true
+  roles:
+    - nginx
+    - fluent_bit
+
+- name: Part 3 - index pattern in Dashboards
+  hosts: ops
+  become: true
+  gather_facts: false
+  tasks:
+    # без списка полей Discover не строит гистограмму по @timestamp
+    - name: Fields of the logs data stream
+      ansible.builtin.uri:
+        url: "https://{{ inventory_hostname }}:{{ dashboards_port }}/api/index_patterns/_fields_for_wildcard?pattern={{ logs_data_stream }}*"
+        user: "{{ admin_user }}"
+        password: "{{ admin_password }}"
+        force_basic_auth: true
+        ca_path: "{{ ca_cert_path }}"
+      register: logging_fields
+
+    - name: Index pattern for Discover
+      ansible.builtin.uri:
+        url: "https://{{ inventory_hostname }}:{{ dashboards_port }}/api/saved_objects/index-pattern/{{ logs_data_stream }}"
+        method: POST
+        user: "{{ admin_user }}"
+        password: "{{ admin_password }}"
+        force_basic_auth: true
+        ca_path: "{{ ca_cert_path }}"
+        headers:
+          osd-xsrf: "true"
+        body_format: json
+        body:
+          attributes:
+            title: "{{ logs_data_stream }}*"
+            timeFieldName: "@timestamp"
+            fields: "{{ logging_fields.json.fields | to_json }}"
+        status_code: [200, 409]
+      register: logging_pattern
+      changed_when: logging_pattern.status == 200
