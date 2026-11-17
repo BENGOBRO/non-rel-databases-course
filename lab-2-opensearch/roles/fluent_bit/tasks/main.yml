@@ -1,0 +1,47 @@
+---
+- name: Fluent Bit repo key
+  ansible.builtin.get_url:
+    url: https://packages.fluentbit.io/fluentbit.key
+    dest: /usr/share/keyrings/fluentbit.asc
+    mode: "0644"
+
+- name: Fluent Bit repo
+  ansible.builtin.apt_repository:
+    repo: >-
+      deb [signed-by=/usr/share/keyrings/fluentbit.asc]
+      https://packages.fluentbit.io/ubuntu/{{ ansible_facts.distribution_release }}
+      {{ ansible_facts.distribution_release }} main
+    filename: fluent-bit
+
+- name: Install fluent-bit
+  ansible.builtin.apt:
+    name: fluent-bit
+
+- name: State dir
+  ansible.builtin.file:
+    path: /var/lib/fluent-bit
+    state: directory
+    mode: "0750"
+
+- name: Parsers
+  ansible.builtin.template:
+    src: parsers-lab.conf.j2
+    dest: /etc/fluent-bit/parsers-lab.conf
+    mode: "0644"
+  notify: Restart fluent-bit
+
+- name: Config
+  ansible.builtin.template:
+    src: fluent-bit.conf.j2
+    dest: /etc/fluent-bit/fluent-bit.conf
+    mode: "0600"
+  notify: Restart fluent-bit
+
+- name: Enable and start fluent-bit
+  ansible.builtin.systemd_service:
+    name: fluent-bit
+    enabled: true
+    state: started
+
+- name: Apply pending restarts
+  ansible.builtin.meta: flush_handlers

@@ -1,0 +1,16 @@
+---
+- name: Part 4 - host metrics
+  hosts: lab
+  become: true
+  roles:
+    - prometheus.prometheus.node_exporter
+
+- name: Part 4 - Prometheus and Grafana
+  hosts: ops
+  become: true
+  roles:
+    - prometheus.prometheus.prometheus
+    - grafana
+
+- name: Part 4 - check
+  ansible.builtin.import_playbook: monitoring_check.yml

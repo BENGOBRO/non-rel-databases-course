@@ -1,0 +1,101 @@
+---
+- name: Download packages to control machine
+  ansible.builtin.get_url:
+    url: "{{ item.url }}"
+    dest: "{{ artifacts_dir }}/{{ item.file }}"
+    mode: "0644"
+  loop:
+    - {url: "{{ grafana_musl_url }}", file: "{{ grafana_musl_deb }}"}
+    - {url: "{{ grafana_deb_url }}", file: "{{ grafana_deb }}"}
+  loop_control:
+    label: "{{ item.file }}"
+  delegate_to: localhost
+  become: false
+
+- name: Package cache dir
+  ansible.builtin.file:
+    path: "{{ remote_artifacts_dir }}"
+    state: directory
+    mode: "0755"
+
+- name: Copy packages
+  ansible.builtin.copy:
+    src: "{{ artifacts_dir }}/{{ item }}"
+    dest: "{{ remote_artifacts_dir }}/{{ item }}"
+    mode: "0644"
+  loop: ["{{ grafana_musl_deb }}", "{{ grafana_deb }}"]
+
+- name: Install grafana
+  ansible.builtin.apt:
+    deb: "{{ remote_artifacts_dir }}/{{ item }}"
+  loop: ["{{ grafana_musl_deb }}", "{{ grafana_deb }}"]
+
+- name: Config grafana.ini
+  ansible.builtin.template:
+    src: grafana.ini.j2
+    dest: /etc/grafana/grafana.ini
+    owner: root
+    group: grafana
+    mode: "0640"
+  notify: Restart grafana
+
+- name: Prometheus datasource
+  ansible.builtin.copy:
+    dest: /etc/grafana/provisioning/datasources/prometheus.yml
+    owner: root
+    group: grafana
+    mode: "0640"
+    content: |
+      apiVersion: 1
+      datasources:
+        - name: Prometheus
+          uid: prometheus
+          type: prometheus
+          access: proxy
+          url: http://localhost:{{ prometheus_port }}
+          isDefault: true
+          jsonData:
+            timeInterval: {{ prometheus_scrape_interval }}
+  notify: Restart grafana
+
+- name: Dashboard provider
+  ansible.builtin.copy:
+    dest: /etc/grafana/provisioning/dashboards/opensearch-lab.yml
+    owner: root
+    group: grafana
+    mode: "0640"
+    content: |
+      apiVersion: 1
+      providers:
+        - name: opensearch-lab
+          type: file
+          updateIntervalSeconds: 10
+          options:
+            path: /var/lib/grafana/dashboards
+  notify: Restart grafana
+
+- name: Dashboards dir
+  ansible.builtin.file:
+    path: /var/lib/grafana/dashboards
+    state: directory
+    owner: root
+    group: grafana
+    mode: "0755"
+
+- name: Dashboard
+  ansible.builtin.copy:
+    src: opensearch-lab.json
+    dest: /var/lib/grafana/dashboards/opensearch-lab.json
+    owner: root
+    group: grafana
+    mode: "0644"
+
+- name: Enable and start grafana
+  ansible.builtin.systemd_service:
+    name: grafana-server
+    enabled: true
+    state: started
+    daemon_reload: true
+
+- name: Apply pending restarts
+  ansible.builtin.meta: flush_handlers

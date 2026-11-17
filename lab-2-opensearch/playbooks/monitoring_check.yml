@@ -1,0 +1,100 @@
+---
+# Проверка цепочки OpenSearch (плагин prometheus-exporter) -> Prometheus -> Grafana
+- name: Monitoring check
+  hosts: ops
+  become: true
+  gather_facts: false
+  vars:
+    required_metrics:
+      - opensearch_cluster_status
+      - opensearch_cluster_nodes_number
+      - opensearch_cluster_shards_number
+      - opensearch_jvm_mem_heap_used_percent
+      - opensearch_os_cpu_percent
+      - opensearch_fs_path_available_bytes
+      - opensearch_indices_indexing_index_count
+      - opensearch_indices_search_query_count
+      - opensearch_threadpool_threads_count
+      - opensearch_index_doc_number
+  tasks:
+    - name: Service facts
+      ansible.builtin.service_facts:
+
+    - name: Services are running
+      ansible.builtin.assert:
+        that: ansible_facts.services[item ~ '.service'].state | default('') == 'running'
+        fail_msg: "{{ item }} is not running"
+        quiet: true
+      loop: [node_exporter, prometheus, grafana-server]
+
+    - name: Plugin metrics from every node
+      ansible.builtin.uri:
+        url: "https://{{ item }}:{{ opensearch_http_port }}/_prometheus/metrics"
+        user: "{{ monitor_user }}"
+        password: "{{ monitor_password }}"
+        force_basic_auth: true
+        ca_path: "{{ ca_cert_path }}"
+        return_content: true
+      loop: "{{ groups['opensearch'] }}"
+      register: mon_metrics
+
+    - name: Required metrics present
+      ansible.builtin.assert:
+        that: mon_metrics.results[0].content is search('(?m)^' ~ item ~ '[{ ]')
+        fail_msg: "{{ item }} is missing"
+        quiet: true
+      loop: "{{ required_metrics }}"
+
+    - name: Prometheus targets
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:{{ prometheus_port }}/api/v1/targets?state=active"
+      register: mon_targets
+      retries: 8
+      delay: 5
+      until: mon_targets.json.data.activeTargets | rejectattr('health', 'eq', 'up') | list | length == 0
+
+    - name: Cluster status in Prometheus
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:{{ prometheus_port }}/api/v1/query?query={{ 'max(opensearch_cluster_status)' | urlencode }}"
+      register: mon_status
+      retries: 6
+      delay: 5
+      until: mon_status.json.data.result | length > 0
+
+    - name: Grafana health
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:{{ grafana_http_port }}/api/health"
+      register: mon_grafana
+      retries: 10
+      delay: 3
+      until: mon_grafana.status == 200
+
+    - name: Dashboard provisioned
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:{{ grafana_http_port }}/api/dashboards/uid/opensearch-lab"
+        user: admin
+        password: "{{ grafana_admin_password }}"
+        force_basic_auth: true
+      register: mon_dash
+
+    - name: Datasource works
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:{{ grafana_http_port }}/api/datasources/uid/prometheus/health"
+        user: admin
+        password: "{{ grafana_admin_password }}"
+        force_basic_auth: true
+
+    - name: Summary
+      ansible.builtin.debug:
+        msg:
+          - "plugin metrics per node: {{ groups['opensearch'] | zip(counts) | map('join', '=') | join(', ') }}"
+          - "targets: {{ jobs | zip(instances, health) | map('join', ' ') | join(', ') }}"
+          - "cluster status: {{ ['green', 'yellow', 'red'][mon_status.json.data.result[0].value[1] | int] }}"
+          - "grafana {{ mon_grafana.json.version }}, dashboard: {{ mon_dash.json.dashboard.title }}"
+          - "http://{{ ansible_host }}:{{ grafana_http_port }}/d/opensearch-lab"
+      vars:
+        targets: "{{ mon_targets.json.data.activeTargets }}"
+        jobs: "{{ targets | map(attribute='labels.job') }}"
+        instances: "{{ targets | map(attribute='labels.instance') }}"
+        health: "{{ targets | map(attribute='health') }}"
+        counts: "{{ mon_metrics.results | map(attribute='content') | map('regex_findall', '(?m)^opensearch_') | map('length') }}"

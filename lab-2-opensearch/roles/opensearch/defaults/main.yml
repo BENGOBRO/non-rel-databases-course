@@ -1,0 +1,8 @@
+---
+opensearch_home: /usr/share/opensearch
+opensearch_deb: "opensearch-{{ opensearch_version }}-linux-{{ deb_arch }}.deb"
+opensearch_deb_url: "https://artifacts.opensearch.org/releases/bundle/opensearch/{{ opensearch_version }}/{{ opensearch_deb }}"
+opensearch_exporter_zip: "prometheus-exporter-{{ prometheus_exporter_version }}.zip"
+opensearch_exporter_url: >-
+  https://github.com/opensearch-project/opensearch-prometheus-exporter/releases/download/{{
+  prometheus_exporter_version }}/{{ opensearch_exporter_zip }}

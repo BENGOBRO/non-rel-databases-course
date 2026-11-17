@@ -1,0 +1,12 @@
+---
+# admin - сертификат администратора безопасности (plugins.security.authcz.admin_dn),
+# узлы OpenSearch получают OU=nodes (plugins.security.nodes_dn), os-ops - для Dashboards.
+# Порядок RDN O, OU, CN даёт DN вида CN=...,OU=...,O=...
+pki_certs: >-
+  {%- set certs = [{'name': 'admin', 'subject': [{'O': pki_org}, {'OU': 'ops'}, {'CN': 'admin'}]}] -%}
+  {%- for h in groups['opensearch'] + groups['ops'] -%}
+  {%- set _ = certs.append({'name': h,
+        'subject': [{'O': pki_org}, {'OU': 'nodes' if h in groups['opensearch'] else 'ops'}, {'CN': h}],
+        'san': ['DNS:' ~ h, 'IP:' ~ hostvars[h].ansible_host, 'DNS:localhost', 'IP:127.0.0.1']}) -%}
+  {%- endfor -%}
+  {{ certs }}

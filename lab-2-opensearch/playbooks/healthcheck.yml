@@ -1,0 +1,99 @@
+---
+# Проверка кластера: состав и роли узлов, TLS на обоих уровнях, закрытый анонимный доступ
+- name: Cluster healthcheck
+  hosts: hot[0]
+  become: true
+  gather_facts: false
+  tasks:
+    - name: Cluster health
+      ansible.builtin.uri:
+        url: "{{ opensearch_url }}/_cluster/health"
+        user: "{{ admin_user }}"
+        password: "{{ admin_password }}"
+        force_basic_auth: true
+        ca_path: "{{ ca_cert_path }}"
+      register: hc_health
+
+    - name: Nodes
+      ansible.builtin.uri:
+        url: "{{ opensearch_url }}/_cat/nodes?format=json&h=name,ip,node.roles,cluster_manager,heap.percent,disk.used_percent,version"
+        user: "{{ admin_user }}"
+        password: "{{ admin_password }}"
+        force_basic_auth: true
+        ca_path: "{{ ca_cert_path }}"
+      register: hc_nodes
+
+    - name: Node attributes
+      ansible.builtin.uri:
+        url: "{{ opensearch_url }}/_cat/nodeattrs?format=json&h=node,attr,value"
+        user: "{{ admin_user }}"
+        password: "{{ admin_password }}"
+        force_basic_auth: true
+        ca_path: "{{ ca_cert_path }}"
+      register: hc_attrs
+
+    - name: TLS settings of nodes
+      ansible.builtin.uri:
+        url: "{{ opensearch_url }}/_nodes/settings?filter_path=nodes.*.name,nodes.*.settings.plugins.security.ssl"
+        user: "{{ admin_user }}"
+        password: "{{ admin_password }}"
+        force_basic_auth: true
+        ca_path: "{{ ca_cert_path }}"
+      register: hc_tls
+
+    - name: REST without TLS
+      ansible.builtin.uri:
+        url: "http://{{ groups['hot'][0] }}:{{ opensearch_http_port }}/"
+        timeout: 5
+      register: hc_plain
+      failed_when: false
+
+    - name: REST without credentials
+      ansible.builtin.uri:
+        url: "{{ opensearch_url }}/_cluster/health"
+        ca_path: "{{ ca_cert_path }}"
+        status_code: [401]
+
+    - name: Certificate presented on REST and transport ports
+      ansible.builtin.shell:
+        cmd: >-
+          set -o pipefail;
+          echo | openssl s_client -connect {{ item.0 }}:{{ item.1 }} -CAfile {{ ca_cert_path }}
+          -cert {{ opensearch_conf_dir }}/certs/node.pem -key {{ opensearch_conf_dir }}/certs/node.key
+          -verify_hostname {{ item.0 }} 2>/dev/null
+          | grep -E '^(subject=|Verification|Verify return code|New, )' | tr '\n' ' '
+        executable: /bin/bash
+      loop: "{{ groups['opensearch'] | product([opensearch_http_port, opensearch_transport_port]) | list }}"
+      loop_control:
+        label: "{{ item.0 }}:{{ item.1 }}"
+      register: hc_certs
+      changed_when: false
+
+    - name: Summary
+      ansible.builtin.debug:
+        msg: "{{ lines }}"
+      vars:
+        temp_attrs: "{{ hc_attrs.json | selectattr('attr', 'eq', 'temp') }}"
+        temps: "{{ dict(temp_attrs | map(attribute='node') | zip(temp_attrs | map(attribute='value'))) }}"
+        lines: >-
+          {%- set out = ['cluster ' ~ hc_health.json.cluster_name ~ ': ' ~ hc_health.json.status
+                ~ ', nodes ' ~ hc_health.json.number_of_nodes ~ ', data nodes ' ~ hc_health.json.number_of_data_nodes
+                ~ ', shards ' ~ hc_health.json.active_shards ~ ', unassigned ' ~ hc_health.json.unassigned_shards] -%}
+          {%- for n in hc_nodes.json | sort(attribute='name') -%}
+          {%- set _ = out.append('%-10s %-14s temp=%-4s roles=%-28s manager=%s heap=%s%% disk=%s%% v%s' | format(
+                n.name, n.ip, temps[n.name], n['node.roles'], n.cluster_manager, n['heap.percent'], n['disk.used_percent'], n.version)) -%}
+          {%- endfor -%}
+          {%- for r in hc_certs.results -%}
+          {%- set _ = out.append('tls %s:%s  %s' | format(r.item.0, r.item.1, r.stdout | trim)) -%}
+          {%- endfor -%}
+          {%- set _ = out.append('plain http to REST port: ' ~ ('rejected' if hc_plain.status != 200 else 'ACCEPTED')) -%}
+          {%- set _ = out.append('request without credentials: 401') -%}
+          {{ out }}
+
+    - name: Cluster must be green with all nodes
+      ansible.builtin.assert:
+        that:
+          - hc_health.json.status == 'green'
+          - hc_health.json.number_of_nodes == groups['opensearch'] | length
+          - hc_plain.status != 200
+        quiet: true

@@ -1,0 +1,31 @@
+---
+- name: Part 1 - certificates
+  ansible.builtin.import_playbook: pki.yml
+
+- name: Part 1 - hosts
+  hosts: lab
+  become: true
+  roles:
+    - lab_host
+
+- name: Part 1 - OpenSearch nodes
+  hosts: opensearch
+  become: true
+  roles:
+    - opensearch
+
+- name: Part 1 - security bootstrap
+  hosts: hot[0]
+  become: true
+  gather_facts: false
+  roles:
+    - security_bootstrap
+
+- name: Part 1 - Dashboards
+  hosts: ops
+  become: true
+  roles:
+    - dashboards
+
+- name: Part 1 - check
+  ansible.builtin.import_playbook: healthcheck.yml

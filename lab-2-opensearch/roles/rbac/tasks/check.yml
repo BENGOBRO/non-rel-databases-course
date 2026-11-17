@@ -1,0 +1,36 @@
+---
+- name: Probe index for negative checks
+  ansible.builtin.uri:
+    url: "{{ opensearch_url }}/rbac-probe/_doc/1"
+    method: PUT
+    user: "{{ admin_user }}"
+    password: "{{ admin_password }}"
+    force_basic_auth: true
+    ca_path: "{{ ca_cert_path }}"
+    body_format: json
+    body: {note: "not a log"}
+    status_code: [200, 201]
+  changed_when: false
+
+- name: Access matrix
+  ansible.builtin.script:
+    cmd: >-
+      rbac_check.py {{ opensearch_url }} {{ ca_cert_path }} {{ logs_data_stream }}
+      {{ rbac_users | map(attribute='name') | zip(rbac_users | map(attribute='password')) | map('join', ':') | join(' ') }}
+    executable: python3
+  register: rbac_matrix
+  changed_when: false
+
+- name: Matrix
+  ansible.builtin.debug:
+    msg: "{{ rbac_matrix.stdout_lines }}"
+
+- name: Remove probe index
+  ansible.builtin.uri:
+    url: "{{ opensearch_url }}/rbac-probe"
+    method: DELETE
+    user: "{{ admin_user }}"
+    password: "{{ admin_password }}"
+    force_basic_auth: true
+    ca_path: "{{ ca_cert_path }}"
+  changed_when: false

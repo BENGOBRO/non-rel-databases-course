@@ -1,0 +1,7 @@
+/collections/
+/pki/
+/artifacts/
+*.retry
+.vault_pass
+cloud-init.yml
+.ansible/

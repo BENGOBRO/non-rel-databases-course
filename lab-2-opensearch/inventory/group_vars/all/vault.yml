@@ -1,0 +1,9 @@
+---
+# Пароли учебного стенда. В реальном окружении файл шифруется:
+#   ansible-vault encrypt inventory/group_vars/all/vault.yml
+vault_admin_password: "Lab2-Cluster-Root!"
+vault_kibanaserver_password: "Kibana-Lab-Pass1"
+vault_logs_writer_password: "Writer-Lab-Pass1"
+vault_logs_reader_password: "Reader-Lab-Pass1"
+vault_metrics_monitor_password: "Monitor-Lab-Pass1"
+vault_grafana_admin_password: GrafanaPass123

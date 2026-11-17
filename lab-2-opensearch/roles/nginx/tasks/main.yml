@@ -1,0 +1,56 @@
+---
+- name: Install nginx
+  ansible.builtin.apt:
+    name: nginx
+
+- name: Site root
+  ansible.builtin.file:
+    path: "{{ nginx_site_root }}"
+    state: directory
+    mode: "0755"
+
+- name: Page
+  ansible.builtin.copy:
+    src: index.html
+    dest: "{{ nginx_site_root }}/index.html"
+    mode: "0644"
+
+- name: JSON log format
+  ansible.builtin.template:
+    src: log-json.conf.j2
+    dest: /etc/nginx/conf.d/log-json.conf
+    mode: "0644"
+  notify: Reload nginx
+
+- name: Site config
+  ansible.builtin.template:
+    src: lab.conf.j2
+    dest: /etc/nginx/sites-available/lab
+    mode: "0644"
+  notify: Reload nginx
+
+- name: Enable site
+  ansible.builtin.file:
+    src: /etc/nginx/sites-available/lab
+    dest: /etc/nginx/sites-enabled/lab
+    state: link
+  notify: Reload nginx
+
+- name: Disable default site
+  ansible.builtin.file:
+    path: /etc/nginx/sites-enabled/default
+    state: absent
+  notify: Reload nginx
+
+- name: Check config
+  ansible.builtin.command: nginx -t
+  changed_when: false
+
+- name: Enable and start nginx
+  ansible.builtin.systemd_service:
+    name: nginx
+    enabled: true
+    state: started
+
+- name: Apply pending reloads
+  ansible.builtin.meta: flush_handlers

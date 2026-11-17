@@ -1,0 +1,92 @@
+---
+# Описания хранятся файлами на узле: изменение файла -> повторная отправка в кластер
+- name: Definitions dir
+  ansible.builtin.file:
+    path: /etc/nrdb-lab
+    state: directory
+    mode: "0755"
+
+- name: Index template definition
+  ansible.builtin.template:
+    src: index-template.json.j2
+    dest: /etc/nrdb-lab/index-template.json
+    mode: "0644"
+  register: log_indices_tpl_file
+
+- name: ISM policy definition
+  ansible.builtin.template:
+    src: ism-policy.json.j2
+    dest: /etc/nrdb-lab/ism-policy.json
+    mode: "0644"
+  register: log_indices_ism_file
+
+- name: Current index template
+  ansible.builtin.uri:
+    url: "{{ opensearch_url }}/_index_template/{{ logs_data_stream }}"
+    user: "{{ admin_user }}"
+    password: "{{ admin_password }}"
+    force_basic_auth: true
+    ca_path: "{{ ca_cert_path }}"
+    status_code: [200, 404]
+  register: log_indices_tpl_cur
+
+- name: Index template
+  ansible.builtin.uri:
+    url: "{{ opensearch_url }}/_index_template/{{ logs_data_stream }}"
+    method: PUT
+    user: "{{ admin_user }}"
+    password: "{{ admin_password }}"
+    force_basic_auth: true
+    ca_path: "{{ ca_cert_path }}"
+    body_format: json
+    body: "{{ lookup('template', 'index-template.json.j2') }}"
+  when: log_indices_tpl_file is changed or log_indices_tpl_cur.status == 404
+  changed_when: true
+
+- name: Current ISM policy
+  ansible.builtin.uri:
+    url: "{{ opensearch_url }}/_plugins/_ism/policies/{{ logs_policy }}"
+    user: "{{ admin_user }}"
+    password: "{{ admin_password }}"
+    force_basic_auth: true
+    ca_path: "{{ ca_cert_path }}"
+    status_code: [200, 404]
+  register: log_indices_ism_cur
+
+- name: ISM policy
+  ansible.builtin.uri:
+    url: >-
+      {{ opensearch_url }}/_plugins/_ism/policies/{{ logs_policy }}{{
+        '?if_seq_no=%s&if_primary_term=%s' | format(log_indices_ism_cur.json._seq_no, log_indices_ism_cur.json._primary_term)
+        if log_indices_ism_cur.status == 200 else '' }}
+    method: PUT
+    user: "{{ admin_user }}"
+    password: "{{ admin_password }}"
+    force_basic_auth: true
+    ca_path: "{{ ca_cert_path }}"
+    body_format: json
+    body: "{{ lookup('template', 'ism-policy.json.j2') }}"
+    status_code: [200, 201]
+  when: log_indices_ism_file is changed or log_indices_ism_cur.status == 404
+  changed_when: true
+
+- name: Current data stream
+  ansible.builtin.uri:
+    url: "{{ opensearch_url }}/_data_stream/{{ logs_data_stream }}"
+    user: "{{ admin_user }}"
+    password: "{{ admin_password }}"
+    force_basic_auth: true
+    ca_path: "{{ ca_cert_path }}"
+    status_code: [200, 404]
+  register: log_indices_ds_cur
+
+- name: Data stream
+  ansible.builtin.uri:
+    url: "{{ opensearch_url }}/_data_stream/{{ logs_data_stream }}"
+    method: PUT
+    user: "{{ admin_user }}"
+    password: "{{ admin_password }}"
+    force_basic_auth: true
+    ca_path: "{{ ca_cert_path }}"
+  when: log_indices_ds_cur.status == 404
+  changed_when: true

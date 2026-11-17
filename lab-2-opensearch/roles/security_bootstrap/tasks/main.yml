@@ -1,0 +1,52 @@
+---
+# Первичная настройка безопасности по сертификату администратора (admin_dn):
+# паролей по умолчанию в кластере нет, встроенные пользователи создаются через REST API.
+- name: Wait for cluster
+  ansible.builtin.uri:
+    url: "{{ opensearch_url }}/_cluster/health?wait_for_nodes={{ groups['opensearch'] | length }}&timeout=30s"
+    client_cert: "{{ opensearch_conf_dir }}/certs/admin.pem"
+    client_key: "{{ opensearch_conf_dir }}/certs/admin.key"
+    ca_path: "{{ ca_cert_path }}"
+  register: security_bootstrap_health
+  retries: 20
+  delay: 10
+  until: security_bootstrap_health.status == 200 and not security_bootstrap_health.json.timed_out
+
+- name: Existing internal users
+  ansible.builtin.uri:
+    url: "{{ opensearch_url }}/_plugins/_security/api/internalusers"
+    client_cert: "{{ opensearch_conf_dir }}/certs/admin.pem"
+    client_key: "{{ opensearch_conf_dir }}/certs/admin.key"
+    ca_path: "{{ ca_cert_path }}"
+  register: security_bootstrap_users
+  retries: 12
+  delay: 5
+  until: security_bootstrap_users.status == 200
+
+- name: Built-in users
+  ansible.builtin.uri:
+    url: "{{ opensearch_url }}/_plugins/_security/api/internalusers/{{ item.name }}"
+    method: PUT
+    client_cert: "{{ opensearch_conf_dir }}/certs/admin.pem"
+    client_key: "{{ opensearch_conf_dir }}/certs/admin.key"
+    ca_path: "{{ ca_cert_path }}"
+    body_format: json
+    body:
+      password: "{{ item.password }}"
+      backend_roles: "{{ item.backend_roles }}"
+      description: "{{ item.description }}"
+    status_code: [200, 201]
+  loop:
+    - name: "{{ admin_user }}"
+      password: "{{ admin_password }}"
+      backend_roles: [admin]
+      description: Cluster administrator
+    - name: kibanaserver
+      password: "{{ kibanaserver_password }}"
+      backend_roles: []
+      description: OpenSearch Dashboards service account
+  loop_control:
+    label: "{{ item.name }}"
+  when: item.name not in security_bootstrap_users.json
+  changed_when: true
+  no_log: true

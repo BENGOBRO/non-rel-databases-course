@@ -1,0 +1,59 @@
+---
+# OpenSearch
+opensearch_version: "3.8.0"
+opensearch_major: "3.x"
+opensearch_cluster_name: lab-cluster
+opensearch_heap: 1g
+opensearch_http_port: 9200
+opensearch_transport_port: 9300
+opensearch_conf_dir: /etc/opensearch
+opensearch_cluster_managers: "{{ groups['opensearch'] }}"
+opensearch_url: "https://{{ groups['hot'][0] }}:{{ opensearch_http_port }}"
+prometheus_exporter_version: "{{ opensearch_version }}.0"
+
+# PKI: CA и сертификаты выпускаются на управляющей машине в каталоге pki/
+pki_dir: "{{ inventory_dir }}/../pki"
+pki_org: nrdb-lab
+pki_days: 365
+pki_admin_dn: "CN=admin,OU=ops,O={{ pki_org }}"
+pki_nodes_dn: "CN=os-*,OU=nodes,O={{ pki_org }}"
+ca_cert_path: /etc/ssl/nrdb-lab/ca.pem
+
+# встроенные пользователи
+admin_user: admin
+admin_password: "{{ vault_admin_password }}"
+kibanaserver_password: "{{ vault_kibanaserver_password }}"
+
+# Dashboards
+dashboards_version: "{{ opensearch_version }}"
+dashboards_port: 5601
+
+# логи nginx
+logs_data_stream: logs-nginx
+logs_policy: logs-nginx-policy
+logs_rollover_size: 1mb
+logs_rollover_age: 1m
+logs_delete_age: 10m
+ism_job_interval: 1
+nginx_site_root: /var/www/lab
+nginx_log: /var/log/nginx/access.json.log
+
+# ролевая модель (часть 2)
+logs_writer_user: logs_writer
+logs_writer_password: "{{ vault_logs_writer_password }}"
+logs_reader_user: logs_reader
+logs_reader_password: "{{ vault_logs_reader_password }}"
+monitor_user: metrics_monitor
+monitor_password: "{{ vault_metrics_monitor_password }}"
+
+# мониторинг
+node_exporter_port: 9100
+prometheus_port: 9090
+prometheus_scrape_interval: 10s
+grafana_http_port: 3000
+grafana_admin_password: "{{ vault_grafana_admin_password }}"
+
+# пакеты скачиваются один раз на управляющую машину и раздаются по ВМ
+artifacts_dir: "{{ inventory_dir }}/../artifacts"
+remote_artifacts_dir: /var/cache/nrdb-lab
+deb_arch: "{{ {'aarch64': 'arm64', 'x86_64': 'x64'}[ansible_facts.architecture] }}"
