@@ -1,0 +1,16 @@
+time="2026-11-17T18:02:58Z" level=warning msg="experimental-prometheus-rw output has been deprecated and is planned for removal in k6 v3. We recommend using opentelemetry for all your metrics output."
+time="2026-11-17T18:06:06Z" level=warning msg="Insufficient VUs, reached 2000 active VUs and cannot initialize more" executor=ramping-arrival-rate scenario=catalog
+requests: 330146  rate: 1138.37/s  failed: 0.00%
+product       avg 466.70 ms  p50 0.79  p95 5255.39  p99 9139.72  max 27692.88
+category_top  avg 1090.80 ms  p50 3.18  p95 7786.57  p99 11654.05  max 24798.82
+update        avg 2011.78 ms  p50 3.01  p95 8745.83  p99 12320.75  max 25327.47
+missing       avg 1928.45 ms  p50 1.61  p95 8686.18  p99 12940.14  max 19311.15
+cache: hit 230373  miss 75999  bypass 10723  hit ratio 75.2%
+dropped_iterations: 88103  max VUs: 2000
+threshold http_req_duration{name:category_top} p(95)<250: FAILED
+threshold http_req_duration{name:missing} p(95)<100: FAILED
+threshold http_req_duration{name:product} p(95)<100: FAILED
+threshold http_req_duration{name:update} p(95)<250: FAILED
+threshold http_req_failed rate<0.01: ok
+time="2026-11-17T18:07:50Z" level=error msg="thresholds on metrics 'http_req_duration{name:category_top}, http_req_duration{name:missing}, http_req_duration{name:product}, http_req_duration{name:update}' have been crossed"
+

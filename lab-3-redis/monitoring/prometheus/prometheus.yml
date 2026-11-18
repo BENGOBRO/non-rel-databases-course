@@ -1,0 +1,28 @@
+global:
+  scrape_interval: 5s
+  evaluation_interval: 5s
+
+rule_files:
+  - alerts.yml
+
+scrape_configs:
+  - job_name: app
+    # все реплики приложения: встроенный DNS Docker возвращает адрес каждого контейнера
+    dns_sd_configs:
+      - names: [app]
+        type: A
+        port: 8000
+        refresh_interval: 10s
+
+  - job_name: redis
+    static_configs:
+      - targets: [redis-exporter:9121]
+        labels: {redis: cache}
+
+  - job_name: postgres
+    static_configs:
+      - targets: [postgres-exporter:9187]
+
+  - job_name: prometheus
+    static_configs:
+      - targets: [localhost:9090]

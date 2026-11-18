@@ -1,0 +1,14 @@
+requests: 387787  rate: 1337.03/s  failed: 0.00%
+product       avg 259.01 ms  p50 0.71  p95 2635.83  p99 5184.59  max 19069.77
+category_top  avg 266.09 ms  p50 0.56  p95 2651.43  p99 6101.38  max 12268.86
+update        avg 648.29 ms  p50 1.46  p95 4134.31  p99 6037.03  max 12790.98
+missing       avg 589.24 ms  p50 1.13  p95 3906.59  p99 5610.79  max 11043.71
+cache: hit 286955  miss 66924  bypass 18543  hit ratio 81.1%
+dropped_iterations: 30462  max VUs: 2000
+threshold http_req_duration{name:missing} p(95)<100: FAILED
+threshold http_req_duration{name:category_top} p(95)<250: FAILED
+threshold http_req_failed rate<0.01: ok
+threshold http_req_duration{name:update} p(95)<250: FAILED
+threshold http_req_duration{name:product} p(95)<100: FAILED
+time="2026-11-17T18:30:22Z" level=error msg="thresholds on metrics 'http_req_duration{name:category_top}, http_req_duration{name:missing}, http_req_duration{name:product}, http_req_duration{name:update}' have been crossed"
+

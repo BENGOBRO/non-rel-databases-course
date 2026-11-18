@@ -1,0 +1,25 @@
+== 1. Cache-aside: товар 6349
+  1-й запрос (реплика 1): code=200 time=0.004664s X-Cache=MISS
+  2-й запрос (реплика 1): code=200 time=0.001358s X-Cache=HIT
+  3-й запрос (реплика 2): code=200 time=0.001550s X-Cache=HIT
+  ключ product:6349: TTL 306 с, 1575 байт
+== 2. Инвалидация при изменении
+  цена до:      40291.13
+  PATCH:        {"id":6349,"invalidated":["product:6349","category:30:top"]}
+  ключ после:   EXISTS=0
+  GET (реплика 2): code=200 time=0.006673s X-Cache=MISS, цена 999.99
+== 3. Кэширование отсутствующих товаров
+  1-й запрос: code=404 time=0.003064s X-Cache=MISS
+  2-й запрос: code=404 time=0.001816s X-Cache=HIT
+  ключ product:106431: TTL 30 с
+== 4. Лавина промахов: 200 одновременных запросов к холодному ключу
+  запросов топа категории 6 в PostgreSQL: 2 на 200 HTTP-запросов
+  дождались значения в кэше: 19
+== 5. Отказ Redis
+  Redis остановлен, запрос 1: code=200 time=0.007421s X-Cache=BYPASS
+  Redis остановлен, запрос 2: code=200 time=0.012768s X-Cache=BYPASS
+  Redis остановлен, запрос 3: code=200 time=0.010195s X-Cache=BYPASS
+  /health: {"db":true,"redis":false,"cache_enabled":true}
+  ошибок Redis в приложении: 3
+  Redis запущен, запрос 1: code=200 time=0.011079s X-Cache=MISS
+  Redis запущен, запрос 2: code=200 time=0.003769s X-Cache=HIT

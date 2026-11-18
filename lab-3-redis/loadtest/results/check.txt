@@ -1,0 +1,44 @@
+== Контейнеры
+  app                                         Up 12 minutes (healthy)
+  grafana                                     Up 54 minutes
+  postgres                                    Up 56 minutes (healthy)
+  postgres-exporter                           Up 56 minutes
+  prometheus                                  Up 56 minutes
+  redis                                       Up 11 minutes (healthy)
+  redis-exporter                              Up 56 minutes
+  renderer                                    Up 28 minutes (healthy)
+== Redis
+  версия                                      redis_version:8.10.3
+  maxmemory                                   67108864
+  maxmemory-policy                            allkeys-lfu
+  save                                        "" (снимки RDB выключены)
+  appendonly                                  no
+  пользователи                                admin app default exporter 
+== Матрица доступа Redis (+ разрешено, - отклонено)
+  [app] SET product:check                     + OK
+  [app] GET product:check                     + 1
+  [app] SET session:1 (чужой префикс)         - NOPERM No permissions to access a key
+  [app] KEYS *                                - NOPERM User app has no permissions to ru
+  [app] FLUSHALL                              - NOPERM User app has no permissions to ru
+  [app] CONFIG SET maxmemory                  - NOPERM User app has no permissions to ru
+  [exporter] INFO                             + # Memory
+  [exporter] CONFIG GET maxmemory             + maxmemory
+  [exporter] GET product:check                - NOPERM User exporter has no permissions 
+  [exporter] CONFIG SET maxmemory             - NOPERM User exporter has no permissions 
+  [default] GET без пароля (default)          - NOAUTH Authentication required.
+  [app] неверный пароль                       - AUTH failed: WRONGPASS invalid username-
+  [admin] ACL WHOAMI                          + admin
+== Права в PostgreSQL (пользователь catalog_app)
+  SELECT count(*) FROM reviews                + 2000035
+  UPDATE products SET stock                   + BEGIN
+  UPDATE products SET name                    - ERROR:  permission denied for table prod
+  DELETE FROM reviews                         - ERROR:  permission denied for table revi
+  CREATE TABLE                                - ERROR:  permission denied for schema pub
+== Приложение
+  реплика 1 (127.0.0.1:8001) /health          {"db":true,"redis":true,"cache_enabled":true}
+  реплика 2 (127.0.0.1:8002) /health          {"db":true,"redis":true,"cache_enabled":true}
+== Мониторинг
+  цели Prometheus                             app=up app=up postgres=up prometheus=up redis=up
+  правила алертов                             10 правил, firing: нет
+  Grafana                                     ok 13.3.1
+  дашборд                                     Redis Lab — кэш каталога - 33 панелей
